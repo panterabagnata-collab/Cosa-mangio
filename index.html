@@ -327,8 +327,10 @@ function label(n,g){ if(!g) return n+' a volontà'; const u=F[n].u; if(u){ const
 const short = n => n ? (F[n].s || n) : '';
 
 // av(n) = grammi disponibili (Infinity per i sì/no). Adatta proteina e carboidrato al budget t = {k, p} senza superare la dispensa.
-function cook(r, pf, cf, av, t){
-  const fx = r.x.filter(([n,g,o]) => n!==pf && (g && !o || av(n)>0)).map(([n,g]) => [n, Math.min(g, av(n))]);
+// over[nome] = grammi voluti dall'utente per un ingrediente fisso (0 = tolto), al posto del default della ricetta.
+function cook(r, pf, cf, av, t, over={}){
+  const fx = r.x.filter(([n,g,o]) => n!==pf && (over[n]!==undefined ? over[n]>0 : (g && !o || av(n)>0)))
+    .map(([n,g]) => [n, Math.min(over[n]!==undefined ? over[n] : g, av(n))]);
   const [bk,bp] = mac(fx);
   const P = pf && F[pf], C = cf && F[cf];
   const phi = P && Math.min(P.hi, av(pf)), chi = C && Math.min(C.hi, av(cf));
@@ -339,7 +341,7 @@ function cook(r, pf, cf, av, t){
   }
   const items = [...(pf?[[pf,amt(pf,pg)]]:[]), ...(cf?[[cf,amt(cf,cg)]]:[]), ...fx];
   const [k,p,c,g] = mac(items);
-  return {id:r.id, pf, n:r.n.replace('{p}',short(pf)).replace('{P}',short(pf).replace(/^./,s=>s.toUpperCase())).replace('{c}',short(cf)), items, k, p, c, g};
+  return {id:r.id, pf, cf, n:r.n.replace('{p}',short(pf)).replace('{P}',short(pf).replace(/^./,s=>s.toUpperCase())).replace('{c}',short(cf)), items, k, p, c, g};
 }
 
 const hash = s => [...s].reduce((h,ch)=>(h*31+ch.charCodeAt(0))|0, 7);
@@ -421,6 +423,10 @@ function selfTest(){
   console.assert(tr.rate < -0.4 && tr.rate > -0.6 && !advice(tr,1800,70.3).d, 'calo regolare = nessuna correzione', tr);
   console.assert(guessBase('Bresaola della Valtellina IGP')==='bresaola' && guessBase('Spaghetti n.5')==='pasta' && guessBase('Gallette di riso integrale')==='gallette', 'guessBase');
   console.assert(parseOFF({product:{product_name:'X',nutriments:{'energy-kcal_100g':'151',proteins_100g:32}}}).k===151, 'parseOFF');
+  const off = cook(R[0],'petto di pollo','riso',all,t,{'olio EVO':0});
+  console.assert(!off.items.some(([n])=>n==='olio EVO'), 'override a 0 deve escludere l’ingrediente');
+  const more = cook(R[0],'petto di pollo','riso',all,t,{'olio EVO':20});
+  console.assert(more.items.find(([n])=>n==='olio EVO')[1]===20, 'override deve usare i grammi indicati');
   return 'selftest ok';
 }
 if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,guessBase,parseOFF,selfTest};
@@ -442,8 +448,9 @@ const nf = (n,d=0) => Number(n).toLocaleString('it-IT',{maximumFractionDigits:d,
 const cap = s => s[0].toUpperCase()+s.slice(1);
 const plan = () => MEALS.filter(m => !(S.skip && m==='colazione'));
 const av = n => tracked(n) ? (S.stock[n]||0) : (S.stock[n] ? Infinity : 0);
+const usable = n => av(n) >= (F[n].lo || 1);
 const X_ICON = '<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-let sel, current = [];
+let sel, current = [], cardOver = {}, cardOverMeal;
 
 function applyProducts(){
   for(const n in F) Object.assign(F[n], {k:BASE[n].k,p:BASE[n].p,c:BASE[n].c,g:BASE[n].g});
@@ -475,18 +482,34 @@ function renderRing(){
 }
 
 function suggHTML(){
+  if(cardOverMeal !== sel){ cardOver = {}; cardOverMeal = sel }
   const t = mealTarget(sel), {K,eaten} = budget();
   const head = `<p class="target">Per questo pasto: circa <b style="color:var(--ink)">${nf(Math.round(t.k/10)*10)} kcal</b> e <b style="color:var(--ink)">${Math.round(t.p)} g</b> di proteine.</p>`;
   const add = `<form class="add" data-add><input type="text" name="n" placeholder="Altro (es. pizza con amici)" aria-label="Cosa hai mangiato" required><input type="number" name="k" placeholder="kcal" aria-label="Calorie" min="0" required><input type="number" name="p" placeholder="prot. g" aria-label="Proteine in grammi" min="0"><button class="alt">Aggiungi</button></form>`;
   if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + add;
   if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
-  current = ok;
+  current = ok.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
+    return cook(R.find(x=>x.id===d.id), ov.pf ?? d.pf, ov.cf ?? d.cf, av, t, ov.extras || {}) });
   const tip = today().mt && sel==='spuntino' ? `<p class="note">Giorno di Muay Thai: mangialo 60–90 minuti prima dell’allenamento.</p>` : '';
-  const card = (d,i) => `<article class="dish"><h3>${esc(d.n)}</h3><p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
-    <footer><p class="m"><b>${d.k} kcal</b><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p><button data-eat="${i}">L’ho mangiato</button></footer></article>`;
-  return head + tip + (ok.length ? ok.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
-    + (ok.length > 3 ? `<details><summary>Altre ${ok.length-3} idee</summary>${ok.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
+  const card = (d,i) => {
+    const r = R.find(x=>x.id===d.id);
+    const pOpts = r.p && r.p.includes('|') ? r.p.split('|').filter(usable) : null;
+    const cOpts = r.c && r.c.includes('|') ? r.c.split('|').filter(usable) : null;
+    const swaps = (pOpts ? `<select data-swap="pf" aria-label="Cambia proteina">${pOpts.map(n=>`<option ${n===d.pf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '')
+      + (cOpts ? `<select data-swap="cf" aria-label="Cambia carboidrato">${cOpts.map(n=>`<option ${n===d.cf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '');
+    const extras = r.x.filter(([n,g]) => g && n!==d.pf && n!==d.cf).map(([n,g]) => {
+      const cur = d.items.find(([xn])=>xn===n);
+      return `<label class="qty ${cur?'has':''}"><span><input type="checkbox" data-ex="${esc(n)}" ${cur?'checked':''}> ${esc(n)}</span><input type="number" min="0" data-exg="${esc(n)}" value="${cur?cur[1]:g}" ${cur?'':'disabled'}><small>g</small></label>`;
+    }).join('');
+    return `<article class="dish" data-i="${i}"><h3>${esc(d.n)}</h3>
+      ${swaps ? `<div class="row" style="flex-wrap:wrap;margin:6px 0">${swaps}</div>` : ''}
+      ${extras ? `<div class="qtys" style="margin:6px 0">${extras}</div>` : ''}
+      <p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
+      <footer><p class="m"><b>${d.k} kcal</b><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p><button data-eat="${i}">L’ho mangiato</button></footer></article>`;
+  };
+  return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
+    + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
     + (miss.length ? `<details><summary>Ti manca un solo ingrediente per ${miss.length} ${miss.length===1?'piatto':'piatti'}</summary><p class="dish ing">${miss.map(x=>esc(x.n)+': '+esc(x.m[0])).join('<br>')}</p></details>` : '')
     + add;
 }
@@ -638,6 +661,17 @@ $('day').onclick = e => {
 };
 $('day').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
   today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)}); sel = undefined; save(); render() };
+$('day').onchange = e => {
+  const art = e.target.closest('article.dish'); if(!art) return;
+  const i = +art.dataset.i, ov = cardOver[i] ||= {};
+  if(e.target.dataset.swap==='pf') ov.pf = e.target.value;
+  else if(e.target.dataset.swap==='cf') ov.cf = e.target.value;
+  else if(e.target.dataset.ex!==undefined){ const n = e.target.dataset.ex, g = art.querySelector(`[data-exg="${n}"]`);
+    ov.extras = {...ov.extras, [n]: e.target.checked ? Math.max(1,+g.value||0) : 0} }
+  else if(e.target.dataset.exg!==undefined) ov.extras = {...ov.extras, [e.target.dataset.exg]: Math.max(0,+e.target.value||0)};
+  else return;
+  renderDay();
+};
 $('pantry').onchange = e => { const n = e.target.dataset.n; if(!n) return;
   S.stock[n] = e.target.type==='checkbox' ? +e.target.checked : Math.max(0, +e.target.value||0) * (F[n].cnt ? F[n].u[0] : 1);
   e.target.closest('.qty')?.classList.toggle('has', S.stock[n]>0); save(); renderDay(); renderShop() };
