@@ -535,7 +535,7 @@ const CAM_ERR = {
   NotAllowedError: 'Permesso fotocamera negato. iPhone: tocca “aA” nella barra degli indirizzi → Impostazioni sito web → Fotocamera → Consenti (oppure Impostazioni → Safari → Fotocamera). Android: tocca l’icona a sinistra dell’indirizzo → Autorizzazioni → Fotocamera → Consenti; se non basta, Impostazioni → App → Chrome → Autorizzazioni → Fotocamera. Poi tocca Riprova.',
   NotReadableError: 'La fotocamera è occupata da un’altra app: chiudila e tocca Riprova.',
   NotFoundError: 'Nessuna fotocamera trovata su questo dispositivo.',
-  NoCamera: 'Qui il browser non dà accesso alla fotocamera. Apri il link https://…github.io/… direttamente in Safari o Chrome, non dall’anteprima di un file o dal browser interno di un’altra app.',
+  NoCamera: 'Stai aprendo il file scaricato, non il sito: da un file il browser blocca la fotocamera senza chiedere il permesso. Carica index.html su GitHub Pages e apri il link https://…github.io/… in Chrome o Safari.',
   LibError: 'Non riesco a caricare il lettore di barcode: controlla la connessione e tocca Riprova.',
 };
 const camMsg = m => { $('camErr').textContent = m; $('camErr').hidden = $('scanRetry').hidden = !m; $('camHint').hidden = !!m };
@@ -546,7 +546,7 @@ async function scan(){
   camMsg('');
   let done = false;
   try{
-    if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw {name:'NoCamera'};
+    if(location.protocol!=='https:' && !['localhost','127.0.0.1'].includes(location.hostname) || !navigator.mediaDevices?.getUserMedia) throw {name:'NoCamera'}; // content:// e file:// vengono rifiutati senza prompt
     if(!window.ZXingBrowser) await new Promise((ok,ko) => { const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js'; s.onload=ok; s.onerror=()=>{ s.remove(); ko({name:'LibError'}) }; document.head.append(s) });
     if(!dlg.open) return;
     controls = await new ZXingBrowser.BrowserMultiFormatReader().decodeFromConstraints({video:{facingMode:'environment'}}, $('video'),
