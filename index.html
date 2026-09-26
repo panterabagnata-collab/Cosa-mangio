@@ -228,6 +228,9 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
     <h2 class="sec">Sincronizzazione</h2>
     <section class="card" id="syncBox"></section>
 
+    <h2 class="sec">Assistente AI</h2>
+    <section class="card" id="aiKeyBox"></section>
+
     <h2 class="sec">Backup</h2>
     <section class="card">
       <p class="muted small">I dati stanno solo in questo browser. Scarica un backup ogni tanto: se il telefono cancella i dati del sito, lo reimporti.</p>
@@ -439,7 +442,7 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0}, s || {});
+const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}}, s || {});
 S = init(S);
 if(S.pantry){ for(const n of S.pantry) if(F[n] && !tracked(n)) S.stock[n] = 1; delete S.pantry }
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
@@ -485,6 +488,75 @@ function renderSync(){
     : `<p class="muted small">Incolla lo stesso <a href="https://github.com/settings/tokens" target="_blank" rel="noopener" style="color:var(--blue)">token GitHub (classic, scope “gist”)</a> su ogni dispositivo per tenere i dati allineati.</p>
       <form id="syncForm" class="row" style="margin-top:10px"><input type="password" name="tok" placeholder="Token GitHub" autocomplete="off" required><button>Collega</button></form>`)
     + `<p id="syncStatus" class="small" style="margin-top:8px"></p>`;
+}
+
+// ---------- assistente AI (idee su misura oltre alle ricette fisse; chiave solo su questo dispositivo) ----------
+const AI_KEY = 'cosa-mangio-oggi-ai', AI_MODEL = 'gemini-3.8-flash';
+const AI_EXCLUDED = 'legumi, frutta secca, avena, cereali da colazione, tonno, salmone, fiocchi di latte';
+const DISH_SCHEMA = {type:'OBJECT', properties:{
+  name:{type:'STRING'},
+  items:{type:'ARRAY', items:{type:'OBJECT', properties:{name:{type:'STRING'}, grams:{type:'NUMBER'}, k:{type:'NUMBER'}, p:{type:'NUMBER'}, c:{type:'NUMBER'}, g:{type:'NUMBER'}}, required:['name','grams','k','p','c','g']}},
+  prep:{type:'STRING'}
+}, required:['name','items','prep']};
+let ai; try{ ai = JSON.parse(localStorage.getItem(AI_KEY)) }catch(e){}
+const aiPersist = () => { try{ ai ? localStorage.setItem(AI_KEY, JSON.stringify(ai)) : localStorage.removeItem(AI_KEY) }catch(e){} };
+let aiDish = {};
+async function askGemini(prompt){
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${ai.key}`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({contents:[{parts:[{text:prompt}]}], generationConfig:{responseMimeType:'application/json', responseSchema:DISH_SCHEMA}})
+  });
+  const j = await r.json().catch(()=>null);
+  if(!r.ok) throw new Error(j?.error?.message || ('HTTP '+r.status));
+  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if(!text) throw new Error('risposta vuota');
+  return JSON.parse(text);
+}
+function aiPrompt(meal, t, avoidIngredient, avoidDish){
+  const inStock = Object.keys(F).filter(n => av(n) > 0).map(n => tracked(n) ? `${n} (${Math.round(S.stock[n])} g)` : n);
+  return [
+    `Proponi UN piatto per il pasto "${meal}" di una persona in deficit calorico controllato.`,
+    `Budget per questo pasto: circa ${Math.round(t.k)} kcal e ${Math.round(t.p)} g di proteine, non sforare di molto.`,
+    `Ingredienti in dispensa (preferiscili se hanno senso nel piatto, ma puoi proporne altri): ${inStock.join(', ') || 'dispensa vuota, proponi qualcosa di semplice da comprare'}.`,
+    `Non usare MAI questi alimenti: ${AI_EXCLUDED}${S.dislikes.foods.length ? ', ' + S.dislikes.foods.join(', ') : ''}.`,
+    S.dislikes.dishes.length ? `Non riproporre piatti uguali o molto simili a: ${S.dislikes.dishes.join(', ')}.` : '',
+    avoidIngredient ? `Nell'ultima proposta l'ingrediente "${avoidIngredient}" non va bene: se c'è un sostituto sensato nello stesso piatto usalo, altrimenti cambia piatto del tutto.` : '',
+    avoidDish ? `Il piatto "${avoidDish}" non va bene: proponine uno diverso.` : '',
+    `Rispondi solo con il JSON richiesto: nome del piatto, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi.`
+  ].filter(Boolean).join('\n');
+}
+async function aiGenerate(meal, avoidIngredient, avoidDish){
+  if(!ai){ aiDish[meal] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
+  aiDish[meal] = 'loading'; renderDay();
+  try{ aiDish[meal] = await askGemini(aiPrompt(meal, mealTarget(meal), avoidIngredient, avoidDish)) }
+  catch(e){ aiDish[meal] = {error: 'AI non disponibile: '+e.message} }
+  renderDay();
+}
+function aiCardHTML(meal){
+  const d = aiDish[meal];
+  if(!d) return `<button class="alt" id="aiAsk" style="margin-top:10px;width:100%">Chiedi un’idea all’AI</button>`;
+  if(d === 'loading') return `<p class="note">Chiedo un’idea all’AI…</p>`;
+  if(d.error) return `<p class="note warn">${esc(d.error)}</p><button class="alt" id="aiRetry" style="margin-top:8px">Riprova</button>`;
+  const r1 = v => Math.round(v*10)/10;
+  const t = d.items.reduce((a,it)=>({k:a.k+(+it.k||0), p:a.p+(+it.p||0), c:a.c+(+it.c||0), g:a.g+(+it.g||0)}), {k:0,p:0,c:0,g:0});
+  return `<article class="dish" data-ai="1">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <h3>${esc(d.name)}</h3>
+      <span style="flex:none;background:rgba(183,140,255,.15);color:#B78CFF;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap">~ stima AI</span>
+    </div>
+    <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></li>`).join('')}</ul>
+    <p class="muted small" style="margin-top:8px">${esc(d.prep)}</p>
+    <footer style="margin-top:8px"><p class="m"><b>${Math.round(t.k)} kcal</b><span class="p">P ${r1(t.p)}</span><span class="c">C ${r1(t.c)}</span><span class="f">G ${r1(t.g)}</span></p><button data-aieat="1">L’ho mangiato</button></footer>
+    <button class="ghost" data-aidish="1" style="margin-top:6px">Non mi piace questo piatto</button>
+  </article>`;
+}
+function renderAiKeyBox(){
+  const bl = S.dislikes, tag = (label,key) => `<button type="button" class="pill" data-unban="${esc(key)}" style="gap:4px">${esc(label)}${X_ICON}</button>`;
+  $('aiKeyBox').innerHTML = (ai
+    ? `<p class="muted small">Nella scheda Oggi puoi chiedere idee AI in base a dispensa e gusti, oltre alle ricette fisse.</p><button class="ghost" id="aiOff" style="margin-top:6px">Rimuovi chiave</button>`
+    : `<p class="muted small">Incolla una <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue)">API key Gemini gratuita</a> per avere idee AI in base a dispensa e gusti.</p>
+      <form id="aiKeyForm" class="row" style="margin-top:10px"><input type="password" name="k" placeholder="API key Gemini" autocomplete="off" required><button>Salva</button></form>`)
+    + (bl.foods.length || bl.dishes.length ? `<div class="row" style="flex-wrap:wrap;margin-top:10px">${bl.foods.map(n=>tag(n,'f:'+n)).join('')}${bl.dishes.map(n=>tag(n,'d:'+n)).join('')}</div>` : '');
 }
 const dk = (d=new Date()) => d.toLocaleDateString('sv');
 const today = () => S.days[dk()] ||= {mt:false, log:[]};
@@ -532,7 +604,7 @@ function suggHTML(){
   const t = mealTarget(sel), {K,eaten} = budget();
   const head = `<p class="target">Per questo pasto: circa <b style="color:var(--ink)">${nf(Math.round(t.k/10)*10)} kcal</b> e <b style="color:var(--ink)">${Math.round(t.p)} g</b> di proteine.</p>`;
   const add = `<form class="add" data-add><input type="text" name="n" placeholder="Altro (es. pizza con amici)" aria-label="Cosa hai mangiato" required><input type="number" name="k" placeholder="kcal" aria-label="Calorie" min="0" required><input type="number" name="p" placeholder="prot. g" aria-label="Proteine in grammi" min="0"><button class="alt">Aggiungi</button></form>`;
-  if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + add;
+  if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + aiCardHTML(sel) + add;
   if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
   current = ok.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
@@ -557,7 +629,7 @@ function suggHTML(){
   return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
     + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
     + (miss.length ? `<details><summary>Ti manca un solo ingrediente per ${miss.length} ${miss.length===1?'piatto':'piatti'}</summary><p class="dish ing">${miss.map(x=>esc(x.n)+': '+esc(x.m[0])).join('<br>')}</p></details>` : '')
-    + add;
+    + aiCardHTML(sel) + add;
 }
 
 function renderDay(){
@@ -572,7 +644,7 @@ function renderDay(){
       ${open ? suggHTML() : `<button class="link" data-open="${m}">${done.has(m)?'Aggiungi altro':'Cosa mangio?'}</button>`}
     </section>` }).join('');
 }
-const move = (items, sign) => { for(const [n,g] of items||[]) if(tracked(n) && g) S.stock[n] = Math.max(0, (S.stock[n]||0) + sign*g) };
+const move = (items, sign) => { for(const [n,g] of items||[]) if(F[n] && tracked(n) && g) S.stock[n] = Math.max(0, (S.stock[n]||0) + sign*g) };
 
 // ---------- DISPENSA ----------
 function renderPantry(){
@@ -704,6 +776,14 @@ $('day').onclick = e => {
   if(b.dataset.eat!==undefined){ const d = current[b.dataset.eat];
     today().log.push({m:sel, n:d.n, k:d.k, p:d.p, c:d.c, g:d.g, pf:d.pf, id:d.id, items:d.items}); move(d.items,-1); sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; move(today().log[i].items,+1); today().log.splice(i,1); save(); render() }
+  if(b.id==='aiAsk' || b.id==='aiRetry'){ aiGenerate(sel); return }
+  if(b.dataset.aiban!==undefined){ const n = aiDish[sel].items[b.dataset.aiban].name;
+    if(!S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); save(); aiGenerate(sel, n); return }
+  if(b.dataset.aidish!==undefined){ const n = aiDish[sel].name;
+    if(!S.dislikes.dishes.includes(n)) S.dislikes.dishes.push(n); save(); aiGenerate(sel, null, n); return }
+  if(b.dataset.aieat!==undefined){ const d = aiDish[sel], t = d.items.reduce((a,it)=>({k:a.k+(+it.k||0),p:a.p+(+it.p||0),c:a.c+(+it.c||0),g:a.g+(+it.g||0)}),{k:0,p:0,c:0,g:0});
+    today().log.push({m:sel, n:d.name, k:Math.round(t.k), p:Math.round(t.p), c:Math.round(t.c), g:Math.round(t.g), ai:true});
+    move(d.items.map(it=>[it.name, Math.round(it.grams)]), -1); delete aiDish[sel]; sel = undefined; save(); render(); navigator.vibrate?.(20) }
 };
 $('day').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
   today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)}); sel = undefined; save(); render() };
@@ -759,10 +839,18 @@ $('imp').onchange = async e => { const f = e.target.files[0]; if(!f) return;
   e.target.value = '' };
 $('syncBox').onsubmit = e => { e.preventDefault(); const tok = new FormData(e.target).get('tok').trim(); if(tok) syncConnect(tok) };
 $('syncBox').onclick = e => { if(e.target.id==='syncOff' && confirm('Scollegare la sincronizzazione su questo dispositivo? Il gist su GitHub non viene cancellato.')) syncDisconnect() };
+$('aiKeyBox').onsubmit = e => { e.preventDefault(); const k = new FormData(e.target).get('k').trim(); if(k){ ai = {key:k}; aiPersist(); renderAiKeyBox() } };
+$('aiKeyBox').onclick = e => {
+  if(e.target.id==='aiOff' && confirm('Rimuovere la chiave AI da questo dispositivo?')){ ai = null; aiPersist(); renderAiKeyBox(); return }
+  const un = e.target.closest('[data-unban]')?.dataset.unban; if(!un) return;
+  const [kind, ...rest] = un.split(':'), name = rest.join(':'), list = kind==='f' ? S.dislikes.foods : S.dislikes.dishes;
+  list.splice(list.indexOf(name), 1); save(); renderAiKeyBox();
+};
 document.addEventListener('visibilitychange', () => document.visibilityState==='visible' && (render(), syncPull()));
 
 render();
 renderSync();
+renderAiKeyBox();
 syncPull();
 if(location.hash==='#test') console.log(selfTest());
 </script>
