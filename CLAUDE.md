@@ -8,12 +8,13 @@ Sito: https://panterabagnata-collab.github.io/Cosa-mangio/
 - Stile "ponytail": la soluzione più semplice che funziona. Niente framework, niente build, niente dipendenze nuove se bastano poche righe. Un solo file.
 - Interfaccia in italiano, solo tema scuro (token CSS in `:root`).
 - Dopo ogni modifica: esegui il self-test, poi commit e push su `main` con messaggio in italiano.
-- Il repository è pubblico: non committare dati personali (peso, misure, backup JSON esportati dall'app).
+- Il repository è pubblico: non committare dati personali (peso, misure, backup JSON esportati dall'app, token di sincronizzazione).
 
 ## Struttura di index.html
 - CSS e HTML con 3 schede (Oggi, Dispensa, Andamento) fatte con radio + `:has()`, senza JS.
 - Primo `<script>`: logica pura, senza DOM. `F` (alimenti, valori per 100 g, porzioni min/max), `R` (ricette con alternative `a|b`), `cook()`, `suggest()`, `trend()`, `advice()`, `guessBase()`, `parseOFF()`, `selfTest()`.
-- Secondo `<script>`: interfaccia. Stato in `localStorage`, chiave `cosa-mangio-oggi`: `stock`, `skip`, `kcal`, `prot`, `goal`, `days{data:{mt,log}}`, `weights`, `products`. Backup esporta/importa JSON nella scheda Andamento.
+- Secondo `<script>`: interfaccia. Stato in `localStorage`, chiave `cosa-mangio-oggi`: `stock`, `skip`, `kcal`, `prot`, `goal`, `days{data:{mt,log}}`, `weights`, `products`, `t` (timestamp ultimo salvataggio, per la sincronizzazione). Backup esporta/importa JSON nella scheda Andamento (non include il token di sync, che sta in una chiave `localStorage` separata `cosa-mangio-oggi-sync`).
+- Sincronizzazione (scheda Andamento): un gist segreto sul GitHub dell'utente fa da archivio condiviso. Serve un Personal Access Token *classic* con scope `gist` (i token fine-grained non danno accesso ai gist), incollato una volta per dispositivo. `save()` scrive su `localStorage` e poi propone un push (debounce 1,5s); `syncPull()` gira all'avvio e quando la scheda torna visibile, e sovrascrive lo stato locale solo se il gist ha un `t` più recente (ultimo salvataggio vince, nessun merge).
 - Porzioni: `cook(r,pf,cf,av,t,over)` adatta proteina e carboidrato al budget del pasto (kcal e proteine rimaste × quota del pasto) senza superare la dispensa; `over` (mappa nome→grammi, opzionale) forza un ingrediente fisso a un valore o lo esclude (0), usato dalle carte piatto interattive. Verdure a volontà (grammi 0 in `x`) restano sempre fisse.
 - Carte piatto (in `suggHTML()`): se la ricetta ha alternative (`p`/`c` con `|`) mostra select per cambiare proteina/carboidrato; gli ingredienti fissi con grammi > 0 (olio, formaggio, sugo…) sono spuntabili e modificabili; ogni modifica ricalcola `cook()` al volo (stato in `cardOver`, per indice nella lista dei suggerimenti del pasto aperto) prima di "L'ho mangiato".
 - Quote dei pasti: senza colazione 42/16/42 (pranzo/spuntino/cena), con colazione 25/32/12/31.
@@ -31,4 +32,4 @@ Deve stampare `selftest ok`. Nel browser: aggiungi `#test` all'URL e guarda la c
 - Regole dell'andamento: verso i 75 kg proporre −100 kcal; media ferma (> −0,2 kg/settimana per due confronti settimanali) → −100; calo oltre 1 kg/settimana dopo 3 settimane → +100; obiettivo 70,3 kg → mantenimento.
 
 ## Da fare
-- Idee rimandate: sincronizzazione tra dispositivi, ricette generate con IA, costruttore libero per categoria (proteine/carboidrati/grassi) per comporre un piatto da zero quando manca un macro specifico (es. "mi servono 80g di proteine in più").
+- Idee rimandate: ricette generate con IA, costruttore libero per categoria (proteine/carboidrati/grassi) per comporre un piatto da zero quando manca un macro specifico (es. "mi servono 80g di proteine in più"), merge dei conflitti di sincronizzazione (oggi è "ultimo salvataggio vince").

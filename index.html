@@ -55,7 +55,7 @@ button:active{transform:scale(.98)}
 button.alt{background:var(--s3);color:var(--ink)}
 button.ghost{background:transparent;color:var(--muted);padding:6px}
 button.link{background:transparent;color:var(--blue);padding:8px 0}
-input[type=text],input[type=number],select{font:16px Barlow,system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--s2);color:var(--ink);width:100%;min-width:0}
+input[type=text],input[type=number],input[type=password],select{font:16px Barlow,system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--s2);color:var(--ink);width:100%;min-width:0}
 input::placeholder{color:#66718A}
 .row{display:flex;gap:8px;align-items:center}
 .note{border-left:3px solid var(--carb);padding:10px 12px;background:var(--s2);border-radius:0 12px 12px 0;font-size:15px;margin:8px 0}
@@ -224,6 +224,9 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
         <label>Proteine al giorno (g)<input type="number" id="gp" min="60" step="5"></label>
       </div>
     </section>
+
+    <h2 class="sec">Sincronizzazione</h2>
+    <section class="card" id="syncBox"></section>
 
     <h2 class="sec">Backup</h2>
     <section class="card">
@@ -436,10 +439,53 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}}, s || {});
+const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0}, s || {});
 S = init(S);
 if(S.pantry){ for(const n of S.pantry) if(F[n] && !tracked(n)) S.stock[n] = 1; delete S.pantry }
-const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
+const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
+const save = () => { S.t = Date.now(); persist(); syncPush() };
+
+// ---------- sincronizzazione (gist segreto sul GitHub dell'utente, token solo su questo dispositivo) ----------
+const SYNC_KEY = 'cosa-mangio-oggi-sync', SYNC_FILE = 'cosa-mangio-oggi.json';
+let sync; try{ sync = JSON.parse(localStorage.getItem(SYNC_KEY)) }catch(e){}
+const syncPersist = () => { try{ sync ? localStorage.setItem(SYNC_KEY, JSON.stringify(sync)) : localStorage.removeItem(SYNC_KEY) }catch(e){} };
+const gh = (path, opts={}) => fetch('https://api.github.com'+path, {...opts, headers:{Authorization:'token '+sync.token, Accept:'application/vnd.github+json', ...opts.headers}})
+  .then(async r => { const j = await r.json().catch(()=>null); if(!r.ok) throw new Error(j?.message || ('HTTP '+r.status)); return j });
+const syncMsg = (m, warn) => { const el = $('syncStatus'); if(el){ el.textContent = m; el.style.color = warn ? 'var(--prot)' : 'var(--ok)' } };
+let syncTimer;
+function syncPush(){
+  if(!sync) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => gh(`/gists/${sync.gist}`, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(S)}}})})
+    .then(() => syncMsg('Sincronizzato adesso'))
+    .catch(e => syncMsg('Errore di sincronizzazione: '+e.message, true)), 1500);
+}
+async function syncPull(){
+  if(!sync) return;
+  try{
+    const g = await gh(`/gists/${sync.gist}`);
+    const raw = g.files[SYNC_FILE]?.content;
+    if(raw){ const remote = JSON.parse(raw); if((remote.t||0) > (S.t||0)){ S = init(remote); persist(); render() } }
+    syncMsg('Sincronizzato');
+  }catch(e){ syncMsg('Errore di sincronizzazione: '+e.message, true) }
+}
+async function syncConnect(token){
+  sync = {token};
+  try{
+    const gists = await gh('/gists?per_page=100');
+    const found = gists.find(g => g.files && g.files[SYNC_FILE]);
+    sync.gist = found ? found.id : (await gh('/gists', {method:'POST', body:JSON.stringify({description:'Cosa mangio oggi - sync', public:false, files:{[SYNC_FILE]:{content:JSON.stringify(S)}}})})).id;
+    syncPersist(); renderSync(); await syncPull(); syncPush();
+  }catch(e){ sync = null; syncPersist(); renderSync(); syncMsg('Token non valido o senza permesso "gist": '+e.message, true) }
+}
+function syncDisconnect(){ sync = null; syncPersist(); renderSync() }
+function renderSync(){
+  $('syncBox').innerHTML = (sync
+    ? `<p class="muted small">Ogni salvataggio si sincronizza da solo su tutti i dispositivi collegati con lo stesso token.</p><button class="ghost" id="syncOff" style="margin-top:6px">Scollega questo dispositivo</button>`
+    : `<p class="muted small">Incolla lo stesso <a href="https://github.com/settings/tokens" target="_blank" rel="noopener" style="color:var(--blue)">token GitHub (classic, scope “gist”)</a> su ogni dispositivo per tenere i dati allineati.</p>
+      <form id="syncForm" class="row" style="margin-top:10px"><input type="password" name="tok" placeholder="Token GitHub" autocomplete="off" required><button>Collega</button></form>`)
+    + `<p id="syncStatus" class="small" style="margin-top:8px"></p>`;
+}
 const dk = (d=new Date()) => d.toLocaleDateString('sv');
 const today = () => S.days[dk()] ||= {mt:false, log:[]};
 const $ = id => document.getElementById(id);
@@ -711,9 +757,13 @@ $('imp').onchange = async e => { const f = e.target.files[0]; if(!f) return;
   try{ const d = JSON.parse(await f.text()); if(!d || typeof d.days!=='object') throw 0;
     if(confirm('Sostituire i dati attuali con il backup?')){ S = init(d); save(); render() } }catch(_){ alert('File non valido: scegli un backup esportato da questa app.') }
   e.target.value = '' };
-document.addEventListener('visibilitychange', () => document.visibilityState==='visible' && render());
+$('syncBox').onsubmit = e => { e.preventDefault(); const tok = new FormData(e.target).get('tok').trim(); if(tok) syncConnect(tok) };
+$('syncBox').onclick = e => { if(e.target.id==='syncOff' && confirm('Scollegare la sincronizzazione su questo dispositivo? Il gist su GitHub non viene cancellato.')) syncDisconnect() };
+document.addEventListener('visibilitychange', () => document.visibilityState==='visible' && (render(), syncPull()));
 
 render();
+renderSync();
+syncPull();
 if(location.hash==='#test') console.log(selfTest());
 </script>
 </body>
