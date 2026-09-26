@@ -527,7 +527,7 @@ function renderShop(){
 function renderProds(){
   const ps = Object.entries(S.products);
   $('prodSum').textContent = `Prodotti salvati (${ps.length})`;
-  $('prods').innerHTML = ps.map(([code,p]) => `<li><span class="what">${esc(p.name)}<small>${esc(p.base)} · ${p.k} kcal · P ${p.p} per 100 g · confezione ${p.pack||'?'}</small></span><button class="ghost" data-delp="${esc(code)}" aria-label="Elimina ${esc(p.name)}">${X_ICON}</button></li>`).join('') || `<li class="muted">Scansiona un prodotto per salvarne i valori reali.</li>`;
+  $('prods').innerHTML = ps.map(([code,p]) => `<li><span class="what">${esc(p.name)}<small>${p.base==='__new__'?'cibo a sé':esc(p.base)} · ${p.k} kcal · P ${p.p} per 100 g · confezione ${p.pack||'?'}</small></span><button class="ghost" data-delp="${esc(code)}" aria-label="Elimina ${esc(p.name)}">${X_ICON}</button></li>`).join('') || `<li class="muted">Scansiona un prodotto per salvarne i valori reali.</li>`;
 }
 
 // l'errore resta nello scanner (prima si chiudeva e il messaggio finiva fuori vista)
@@ -573,15 +573,16 @@ async function lookup(code){
 }
 function buyForm(code, p, known){
   const base = known ? p.base : guessBase(p.name);
+  const isNew = base === '__new__';
   const opts = Object.keys(F).map(n=>`<option ${n===base?'selected':''}>${esc(n)}</option>`).join('');
   const num = (name, lab, v) => `<label>${lab}<input type="number" step="0.1" min="0" name="${name}" value="${esc(v??'')}" ${known?'readonly':''} required></label>`;
   return `<form class="card form" id="buy" data-code="${esc(code)}">
     <label class="full">Nome<input type="text" name="name" value="${esc(p.name)}" ${known?'readonly':''} required></label>
-    <label class="full">Nell’app è…<select name="base" required ${known?'disabled':''}><option value="">scegli l’ingrediente</option>${opts}</select></label>
+    <label class="full">Nell’app è…<select name="base" required ${known?'disabled':''}><option value="">scegli l’ingrediente</option><option value="__new__" ${isNew?'selected':''}>Cibo a sé (lo registro come mangiato, non serve per le ricette)</option>${opts}</select></label>
     ${num('k','kcal per 100 g',p.k)}${num('p','Proteine per 100 g',p.p)}${num('c','Carboidrati per 100 g',p.c)}${num('g','Grassi per 100 g',p.g)}
     <label>Confezione (g, o pezzi per uova/mele)<input type="number" min="0" step="1" name="pack" value="${esc(p.pack??'')}" ${known?'readonly':''} required></label>
     <label>Quante confezioni<input type="number" min="1" step="1" name="n" value="1" required></label>
-    <div class="full row"><button>${known?'Aggiungi alla dispensa':'Salva e aggiungi alla dispensa'}</button><button type="button" class="ghost" id="buyCancel">Annulla</button></div>
+    <div class="full row"><button id="buySubmit">${isNew ? 'Registra come mangiato ora' : (known?'Aggiungi alla dispensa':'Salva e aggiungi alla dispensa')}</button><button type="button" class="ghost" id="buyCancel">Annulla</button></div>
   </form>`;
 }
 
@@ -649,11 +650,18 @@ $('scanDlg').addEventListener('close', () => { controls?.stop(); controls = null
 document.querySelectorAll('[name=tab]').forEach(r => r.onchange = () => scrollTo(0,0));
 $('codeForm').onsubmit = e => { e.preventDefault(); lookup($('codeIn').value); $('codeIn').value = '' };
 $('panel').onclick = e => { if(e.target.id==='buyCancel') $('panel').innerHTML = '' };
+$('panel').onchange = e => { if(e.target.name==='base') $('buySubmit').textContent = e.target.value==='__new__' ? 'Registra come mangiato ora' : 'Salva e aggiungi alla dispensa' };
 $('panel').onsubmit = e => { e.preventDefault(); const form = e.target, fd = new FormData(form), code = form.dataset.code;
   const p = S.products[code] || {name:fd.get('name').trim(), base:fd.get('base'), k:+fd.get('k'), p:+fd.get('p'), c:+fd.get('c'), g:+fd.get('g'), pack:+fd.get('pack')};
-  if(!F[p.base]) return;
+  const isNew = p.base === '__new__';
+  if(!isNew && !F[p.base]) return;
   p.t = Date.now(); S.products[code] = p;
-  const n = Math.max(1, +fd.get('n')||1), grams = p.pack * n * (F[p.base].cnt ? F[p.base].u[0] : 1);
+  const n = Math.max(1, +fd.get('n')||1), grams = p.pack * n * (!isNew && F[p.base].cnt ? F[p.base].u[0] : 1);
+  if(isNew){
+    const done = new Set(today().log.map(e=>e.m)), meal = plan().find(m=>!done.has(m)) || plan().at(-1);
+    today().log.push({m:meal, n:p.name, k:Math.round(p.k*grams/100), p:Math.round(p.p*grams/100), c:Math.round(p.c*grams/100), g:Math.round(p.g*grams/100)});
+    save(); render(); return panel(`<p class="note good">Registrato: ${esc(p.name)} a ${meal}.</p>`);
+  }
   if(tracked(p.base)) S.stock[p.base] = (S.stock[p.base]||0) + grams; else S.stock[p.base] = 1;
   save(); render(); panel(`<p class="note good">Aggiunto: ${esc(p.name)} → ${esc(p.base)}${tracked(p.base) ? ` (+${F[p.base].cnt ? grams/F[p.base].u[0]+' pz' : grams+' g'})` : ''}.</p>`) };
 $('wForm').onsubmit = e => { e.preventDefault(); S.weights[dk()] = Math.round(+$('wIn').value*10)/10; save(); render() };
