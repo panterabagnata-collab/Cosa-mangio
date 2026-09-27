@@ -35,12 +35,12 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 /* tab */
 .sr{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
 [data-tab]{display:none}
-body:has(#t1:checked) [data-tab="1"],body:has(#t2:checked) [data-tab="2"],body:has(#t3:checked) [data-tab="3"],body:has(#t4:checked) [data-tab="4"]{display:block}
+body:has(#t1:checked) [data-tab="1"],body:has(#t2:checked) [data-tab="2"],body:has(#t3:checked) [data-tab="3"],body:has(#t4:checked) [data-tab="4"],body:has(#t5:checked) [data-tab="5"]{display:block}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:rgba(12,17,28,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
 .tabs label{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
-body:has(#t1:checked) [for=t1],body:has(#t2:checked) [for=t2],body:has(#t3:checked) [for=t3],body:has(#t4:checked) [for=t4]{color:var(--ink)}
-body:has(#t1:checked) [for=t1] svg,body:has(#t2:checked) [for=t2] svg,body:has(#t3:checked) [for=t3] svg,body:has(#t4:checked) [for=t4] svg{stroke:var(--blue)}
-body:has(#t1:focus-visible) [for=t1],body:has(#t2:focus-visible) [for=t2],body:has(#t3:focus-visible) [for=t3],body:has(#t4:focus-visible) [for=t4]{outline:2px solid var(--carb);border-radius:10px}
+body:has(#t1:checked) [for=t1],body:has(#t2:checked) [for=t2],body:has(#t3:checked) [for=t3],body:has(#t4:checked) [for=t4],body:has(#t5:checked) [for=t5]{color:var(--ink)}
+body:has(#t1:checked) [for=t1] svg,body:has(#t2:checked) [for=t2] svg,body:has(#t3:checked) [for=t3] svg,body:has(#t4:checked) [for=t4] svg,body:has(#t5:checked) [for=t5] svg{stroke:var(--blue)}
+body:has(#t1:focus-visible) [for=t1],body:has(#t2:focus-visible) [for=t2],body:has(#t3:focus-visible) [for=t3],body:has(#t4:focus-visible) [for=t4],body:has(#t5:focus-visible) [for=t5]{outline:2px solid var(--carb);border-radius:10px}
 
 /* controlli */
 .top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:6px 0 12px;flex-wrap:wrap}
@@ -152,10 +152,11 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
 </style>
 </head>
 <body>
-<input type="radio" name="tab" id="t1" class="sr" checked><input type="radio" name="tab" id="t2" class="sr"><input type="radio" name="tab" id="t3" class="sr"><input type="radio" name="tab" id="t4" class="sr">
+<input type="radio" name="tab" id="t1" class="sr" checked><input type="radio" name="tab" id="t2" class="sr"><input type="radio" name="tab" id="t3" class="sr"><input type="radio" name="tab" id="t4" class="sr"><input type="radio" name="tab" id="t5" class="sr">
 <nav class="tabs" aria-label="Sezioni">
   <label for="t1"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>Piano</label>
   <label for="t2"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 9.5h17l-1.8 10h-13.4z"/><path d="M8 9.5l4-5.5 4 5.5M9.5 13.5v3M14.5 13.5v3"/></svg>Dispensa</label>
+  <label for="t5"><svg class="i" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M4 9l3-3 2 2-3 3zM15 20l3-3 2 2-3 3zM17 4l3 3-2 2-3-3zM2 22l3-3 2 2-3 3z"/></svg>Sport</label>
   <label for="t3"><svg class="i" viewBox="0 0 24 24"><path d="M4 19.5h16"/><path d="M4.5 15l5-5 3.5 3 6.5-7"/></svg>Andamento</label>
   <label for="t4"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 4-6 7-6s5.5 2 7 6"/></svg>Profilo</label>
 </nav>
@@ -179,6 +180,7 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
         <p class="stat">Obiettivo <b id="sGoal"></b></p>
         <p class="stat">Mangiate <b id="sEaten"></b></p>
         <p class="stat" id="sMt" hidden>Muay Thai <b>+100</b></p>
+        <p class="stat" id="sWk" hidden>Sport <b id="sWkV"></b></p>
       </div>
       <div class="macros" id="macros"></div>
       <p class="wlink" id="wHint"></p>
@@ -284,6 +286,30 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
       <form id="tasteCustomForm" class="row" style="margin-top:10px"><input type="text" name="n" placeholder="Altro cibo che non ti piace"><button class="alt">Aggiungi</button></form>
       <div id="tasteBlacklist" style="margin-top:14px"></div>
     </section>
+  </div>
+
+  <!-- ========== SPORT ========== -->
+  <div data-tab="5">
+    <header class="top"><div><p class="date">Oggi</p><h1>Sport</h1></div></header>
+    <section class="card">
+      <p class="stat">Bruciate oggi <b id="wkKcal">0</b> kcal</p>
+      <div id="wkLog" style="margin-top:10px"></div>
+    </section>
+
+    <h2 class="sec">Aggiungi allenamento</h2>
+    <form id="wkForm" class="row" style="flex-wrap:wrap">
+      <select id="wkType" class="chip"></select>
+      <input type="number" name="min" placeholder="minuti" min="1" step="1" required style="width:90px">
+      <button class="alt">Aggiungi</button>
+    </form>
+
+    <h2 class="sec">Consiglio AI</h2>
+    <p class="muted small">Dimmi quanto tempo libero hai oggi: ti suggerisco cosa fare, variando rispetto a quello che hai già fatto negli ultimi giorni.</p>
+    <form id="freeMinForm" class="row" style="margin-top:8px">
+      <input type="number" id="freeMin" placeholder="minuti liberi oggi" min="0" step="5">
+      <button class="alt">Suggerisci</button>
+    </form>
+    <div id="wkAiBox" style="margin-top:10px"></div>
   </div>
 </main>
 
@@ -633,6 +659,54 @@ async function aiSwapIngredient(meal, i){
   aiSwapping = false; renderDay();
 }
 const aiKeyOf = (dateKey, meal) => dateKey+'|'+meal;
+
+// ---------- SPORT ----------
+const ACTIVITIES = {'Corsa':10,'Camminata':4,'Palestra (pesi)':6,'Nuoto':9,'Ciclismo':8,'Calcio':8,'Muay Thai / arti marziali':10,'Yoga / stretching':3,'Altro':6};
+let aiWorkout = {};
+const WORKOUT_SCHEMA = {type:'OBJECT', properties:{activity:{type:'STRING'}, minutes:{type:'NUMBER'}, kcal:{type:'NUMBER'}, note:{type:'STRING'}}, required:['activity','minutes','kcal','note']};
+function recentWorkouts(){
+  const names = [];
+  for(let i=1;i<=6;i++) for(const w of (S.days[dk(new Date(Date.now()-i*DAY))]?.workouts||[])) names.push(w.type);
+  return [...new Set(names)];
+}
+function workoutPrompt(freeMin, recent){
+  return [
+    `Suggerisci UN allenamento per una persona in deficit calorico controllato.`,
+    freeMin ? `Ha circa ${freeMin} minuti liberi oggi: la durata proposta deve starci dentro.` : `Non ha indicato quanto tempo ha: proponi qualcosa di circa 30-40 minuti.`,
+    recent.length ? `Negli ultimi giorni ha già fatto: ${recent.join(', ')}. Varia rispetto a queste attività.` : '',
+    `Rispondi solo con il JSON richiesto: nome dell'attività, durata in minuti, stima delle kcal bruciate in quella durata, una breve nota pratica in una frase.`
+  ].filter(Boolean).join('\n');
+}
+async function aiWorkoutSuggest(){
+  const key = dk();
+  if(!ai){ aiWorkout[key] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderWorkouts(); return }
+  aiWorkout[key] = 'loading'; renderWorkouts();
+  const freeMin = +$('freeMin').value || 0;
+  try{ aiWorkout[key] = await askGemini(workoutPrompt(freeMin, recentWorkouts()), WORKOUT_SCHEMA) }
+  catch(e){ aiWorkout[key] = {error:'AI non disponibile: '+e.message} }
+  renderWorkouts();
+}
+function aiWorkoutHTML(){
+  const w = aiWorkout[dk()];
+  if(!w) return '';
+  if(w==='loading') return `<p class="note">Penso a un allenamento…</p>`;
+  if(w.error) return `<p class="note warn">${esc(w.error)}</p>`;
+  return `<article class="dish">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(w.activity)}</h3><span class="badge ai">~ stima AI</span></div>
+    <p class="muted small" style="margin-top:6px">${Math.round(w.minutes)} minuti · ~${Math.round(w.kcal)} kcal</p>
+    <p class="muted small" style="margin-top:6px">${esc(w.note)}</p>
+    <button data-wkaieat="1" style="margin-top:8px">Aggiungi al log</button>
+  </article>`;
+}
+function renderWorkouts(){
+  const d = today(), ws = d.workouts||[];
+  $('wkType').innerHTML = Object.keys(ACTIVITIES).map(a=>`<option>${esc(a)}</option>`).join('');
+  $('wkKcal').textContent = nf(workoutKcal(d));
+  $('wkLog').innerHTML = ws.length
+    ? `<ul class="eaten">${ws.map((w,i)=>`<li><span>${esc(w.type)}<br><small>${w.min} min · ${w.kcal} kcal</small></span><button class="ghost" data-delwk="${i}" aria-label="Rimuovi ${esc(w.type)}">${X_ICON}</button></li>`).join('')}</ul>`
+    : `<p class="muted small">Nessun allenamento registrato oggi.</p>`;
+  $('wkAiBox').innerHTML = aiWorkoutHTML();
+}
 async function aiGenerate(meal, avoidIngredient, avoidDish){
   const key = aiKeyOf(dk(), meal);
   if(!ai){ aiDish[key] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
@@ -761,7 +835,8 @@ function applyProducts(){
   for(const pr of Object.values(S.products).sort((a,b)=>a.t-b.t)) if(F[pr.base] && pr.k!=='') Object.assign(F[pr.base], {k:+pr.k,p:+pr.p||0,c:+pr.c||0,g:+pr.g||0});
 }
 function totals(log){ return log.reduce((t,e)=>({k:t.k+e.k, p:t.p+(e.p||0), c:t.c+(e.c||0), g:t.g+(e.g||0)}), {k:0,p:0,c:0,g:0}) }
-function budgetFor(d){ const K=S.kcal+(d.mt?100:0), G=Math.round(K*.25/9); return {K, P:S.prot, G, C:Math.round((K-S.prot*4-G*9)/4), eaten:totals(d.log)} }
+const workoutKcal = d => (d.workouts||[]).reduce((s,w)=>s+w.kcal,0);
+function budgetFor(d){ const K=S.kcal+(d.mt?100:0)+workoutKcal(d), G=Math.round(K*.25/9); return {K, P:S.prot, G, C:Math.round((K-S.prot*4-G*9)/4), eaten:totals(d.log)} }
 function mealTargetFor(d, meal){
   const {K,P,eaten} = budgetFor(d), sh = S.skip ? SHARE.skip : SHARE.full;
   const done = new Set(d.log.map(e=>e.m));
@@ -781,6 +856,7 @@ function renderRing(){
   $('ring').classList.toggle('over', left < 0);
   $('arc').setAttribute('stroke-dasharray', `${(Math.min(1, eaten.k/K)*326.7).toFixed(1)} 327`); $('arc').style.opacity = eaten.k > 0 ? 1 : 0;
   $('sGoal').textContent = nf(K); $('sEaten').textContent = nf(eaten.k); $('sMt').hidden = !today().mt;
+  const wk = workoutKcal(today()); $('sWk').hidden = !wk; $('sWkV').textContent = '+'+nf(wk);
   const mb = (lab, v, t, col) => `<div class="mac-b"><small>${lab}</small><b>${nf(v)}</b><small style="display:inline"> / ${t} g</small><div class="bar"><i style="width:${Math.min(100,v/t*100)}%;background:${col}"></i></div></div>`;
   $('macros').innerHTML = mb('Proteine', eaten.p, b.P, 'var(--prot)') + mb('Carboidrati', eaten.c, b.C, 'var(--carb)') + mb('Grassi', eaten.g, b.G, 'var(--fat)');
   $('wHint').innerHTML = S.weights[dk()] ? `Peso di stamattina: <b style="color:var(--ink)">${nf(S.weights[dk()],1)} kg</b>` : `<label for="t3">Registra il peso di stamattina</label>`;
@@ -1092,7 +1168,7 @@ function renderWeek(){
   <p class="note ${bal>500?'warn':'good'}">${bal>0?`Sopra l’obiettivo di ${nf(bal)} kcal in questi giorni.`:`Sotto l’obiettivo di ${nf(-bal)} kcal in questi giorni.`}${bal>500?' Non recuperare saltando pasti: riprendi il piano normale, il percorso si allunga solo un po’.':''}</p>` : ''}`;
 }
 
-function render(){ applyProducts(); renderRing(); renderDay(); renderPantry(); renderShop(); renderProds(); renderTrend(); renderWeek(); renderProfileHead() }
+function render(){ applyProducts(); renderRing(); renderDay(); renderPantry(); renderShop(); renderProds(); renderTrend(); renderWeek(); renderProfileHead(); renderWorkouts() }
 
 // ---------- eventi ----------
 $('day').onclick = e => {
@@ -1138,6 +1214,16 @@ $('pantry').onclick = e => {
   if(updName){ updateTarget = updName; scan() }
 };
 $('shop').onclick = e => { if(e.target.id==='copyShop') navigator.clipboard?.writeText(shopList().join('\n')).then(()=>e.target.textContent='Copiata') };
+$('wkForm').onsubmit = e => { e.preventDefault(); const type = $('wkType').value, min = +new FormData(e.target).get('min'); if(!min) return;
+  const d = today(); d.workouts ||= []; d.workouts.push({type, min, kcal: Math.round(ACTIVITIES[type]*min)});
+  e.target.reset(); save(); render() };
+$('wkLog').onclick = e => { const i = e.target.closest('[data-delwk]')?.dataset.delwk; if(i===undefined) return;
+  today().workouts.splice(+i,1); save(); render() };
+$('freeMinForm').onsubmit = e => { e.preventDefault(); aiWorkoutSuggest() };
+$('wkAiBox').onclick = e => { if(e.target.dataset.wkaieat===undefined) return;
+  const w = aiWorkout[dk()], d = today(); d.workouts ||= [];
+  d.workouts.push({type:w.activity, min:Math.round(w.minutes), kcal:Math.round(w.kcal)});
+  delete aiWorkout[dk()]; save(); render() };
 $('prods').onclick = e => { const c = e.target.closest('button')?.dataset.delp; if(c && confirm('Eliminare questo prodotto? L’ingrediente torna ai valori medi.')){ delete S.products[c]; save(); render() } };
 $('scanBtn').onclick = scan;
 $('scanStop').onclick = stopScan;
