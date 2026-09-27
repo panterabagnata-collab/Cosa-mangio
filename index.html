@@ -622,7 +622,7 @@ function aiCardHTML(meal){
     ${proteinBadge({k:t.k,p:t.p})}
     <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></li>`).join('')}</ul>
     <p class="muted small" style="margin-top:8px">${esc(d.prep)}</p>
-    <footer style="margin-top:8px"><p class="m"><b>${Math.round(t.k)} kcal</b><span class="p">P ${r1(t.p)}</span><span class="c">C ${r1(t.c)}</span><span class="f">G ${r1(t.g)}</span></p><button data-aieat="1">L’ho mangiato</button></footer>
+    ${macroFooter({k:Math.round(t.k),p:r1(t.p),c:r1(t.c),g:r1(t.g)}, 0, `<button data-aieat="1">L’ho mangiato</button>`)}
     <button class="ghost" data-aidish="1" style="margin-top:6px">Non mi piace questo piatto</button>
   </article>`;
 }
@@ -670,6 +670,23 @@ const X_ICON = '<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px
 const CAT_ICON = {'Carne':'🍗','Pesce':'🐟','Uova e formaggi':'🥚','Carboidrati':'🍚','Verdura e frutta':'🥕','Sempre in casa':'🧂',
   'Pesce e frutti di mare':'🐟','Uova e latticini':'🥚','Cereali, pasta e carboidrati':'🍚','Legumi':'🫘','Verdura':'🥕','Frutta':'🍎','Frutta secca e semi':'🥜','Condimenti, erbe e spezie':'🧂','Altro':'🍽️'};
 const dishIcon = d => CAT_ICON[F[d.pf]?.cat] || '🍽️';
+function macroRingSVG(p,c,g){
+  const R=16, C=2*Math.PI*R;
+  const segs = [['var(--prot)',p*4],['var(--carb)',c*4],['var(--fat)',g*9]];
+  const tot = segs.reduce((a,[,v])=>a+v,0) || 1;
+  let off = 0;
+  const arcs = segs.filter(([,v])=>v>0).map(([col,v]) => {
+    const len = C*v/tot, dash = `${len.toFixed(1)} ${(C-len).toFixed(1)}`, arc = `<circle cx="20" cy="20" r="${R}" fill="none" stroke="${col}" stroke-width="6" stroke-dasharray="${dash}" stroke-dashoffset="${(-off).toFixed(1)}"/>`;
+    off += len; return arc;
+  }).join('');
+  return `<svg width="40" height="40" viewBox="0 0 40 40" style="transform:rotate(-90deg);flex:none" aria-hidden="true">${arcs}</svg>`;
+}
+const macroFooter = (d,i,eatAttr) => `<footer style="display:flex;align-items:center;gap:10px">
+  ${macroRingSVG(d.p,d.c,d.g)}
+  <div style="flex-grow:1"><b style="font-size:20px;font-family:'Barlow Condensed',sans-serif">${d.k} kcal</b>
+    <p class="m" style="margin-top:2px"><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p></div>
+  ${eatAttr}
+</footer>`;
 const proteinBadge = d => d.k>0 && d.p*4/d.k >= 0.35 ? '<span class="badge prot">💪 Ricco di proteine</span>' : '';
 let sel, current = [], cardOver = {}, cardOverMeal;
 
@@ -739,7 +756,7 @@ function suggHTML(){
       ${swaps ? `<div class="row" style="flex-wrap:wrap;margin:6px 0">${swaps}</div>` : ''}
       ${extras ? `<div class="qtys" style="margin:6px 0">${extras}</div>` : ''}
       <p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
-      <footer><p class="m"><b>${d.k} kcal</b><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p><button data-eat="${i}">L’ho mangiato</button></footer></article>`;
+      ${macroFooter(d,i,`<button data-eat="${i}">L’ho mangiato</button>`)}</article>`;
   };
   return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
     + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
@@ -817,7 +834,7 @@ function ideaCardHTML(i){
     ${proteinBadge(d)}
     <p class="ing">${d.items.map(it=>esc(Math.round(it.grams)+' g '+it.name)).join(', ')}</p>
     <p class="muted small" style="margin-top:6px">${esc(d.prep)}</p>
-    <p class="m" style="margin-top:8px"><b>${d.k} kcal</b><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:10px">${macroRingSVG(d.p,d.c,d.g)}<div><b style="font-size:20px;font-family:'Barlow Condensed',sans-serif">${d.k} kcal</b><p class="m" style="margin-top:2px"><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p></div></div>
     <div class="row" style="margin-top:8px;gap:6px;flex-wrap:wrap">
       <select data-idea-day="${i}">${dayOpts}</select>
       <select data-idea-meal="${i}">${plan().map(m=>`<option value="${m}">${cap(m)}</option>`).join('')}</select>
