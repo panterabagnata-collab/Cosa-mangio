@@ -167,6 +167,7 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
       <div class="chips">
         <label class="pill"><input type="checkbox" id="mt">Muay Thai</label>
         <label class="pill"><input type="checkbox" id="skip">Salto colazione</label>
+        <label class="pill"><input type="checkbox" id="snackAm">Spuntino al mattino</label>
       </div>
     </header>
     <section class="card ringcard" aria-live="polite">
@@ -485,7 +486,7 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}, planMode:'stock', ideas:[]}, s || {});
+const init = s => Object.assign({stock:{}, skip:true, snackMorning:false, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}, planMode:'stock', ideas:[]}, s || {});
 S = init(S);
 if(S.pantry){ for(const n of S.pantry) if(F[n] && !tracked(n)) S.stock[n] = 1; delete S.pantry }
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
@@ -659,7 +660,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf = (n,d=0) => Number(n).toLocaleString('it-IT',{maximumFractionDigits:d,minimumFractionDigits:d});
 const cap = s => s[0].toUpperCase()+s.slice(1);
-const plan = () => MEALS.filter(m => !(S.skip && m==='colazione'));
+const plan = () => (S.snackMorning ? ['colazione','spuntino','pranzo','cena'] : MEALS).filter(m => !(S.skip && m==='colazione'));
 const av = n => tracked(n) ? (S.stock[n]||0) : (S.stock[n] ? Infinity : 0);
 const usable = n => av(n) >= (F[n].lo || 1);
 const X_ICON = '<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -697,7 +698,7 @@ function renderRing(){
   const mb = (lab, v, t, col) => `<div class="mac-b"><small>${lab}</small><b>${nf(v)}</b><small style="display:inline"> / ${t} g</small><div class="bar"><i style="width:${Math.min(100,v/t*100)}%;background:${col}"></i></div></div>`;
   $('macros').innerHTML = mb('Proteine', eaten.p, b.P, 'var(--prot)') + mb('Carboidrati', eaten.c, b.C, 'var(--carb)') + mb('Grassi', eaten.g, b.G, 'var(--fat)');
   $('wHint').innerHTML = S.weights[dk()] ? `Peso di stamattina: <b style="color:var(--ink)">${nf(S.weights[dk()],1)} kg</b>` : `<label for="t3">Registra il peso di stamattina</label>`;
-  $('mt').checked = today().mt; $('skip').checked = S.skip;
+  $('mt').checked = today().mt; $('skip').checked = S.skip; $('snackAm').checked = S.snackMorning;
 }
 
 function suggHTML(){
@@ -708,7 +709,17 @@ function suggHTML(){
   if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + aiCardHTML(sel) + add;
   if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
-  current = ok.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
+  const planned = today().plan?.[sel];
+  let base = ok;
+  if(planned && typeof planned==='object' && planned!=='loading' && !planned.error){
+    if(planned.ai){
+      const key = aiKeyOf(dk(), sel);
+      if(!aiDish[key]){ aiDish[key] = planned; delete today().plan[sel]; save() }
+    } else if(planned.id){
+      base = [planned, ...ok.filter(d => !(d.id===planned.id && d.pf===planned.pf && d.cf===planned.cf))];
+    }
+  }
+  current = base.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
     return cook(R.find(x=>x.id===d.id), ov.pf ?? d.pf, ov.cf ?? d.cf, av, t, ov.extras || {}) });
   const tip = today().mt && sel==='spuntino' ? `<p class="note">Giorno di Muay Thai: mangialo 60–90 minuti prima dell’allenamento.</p>` : '';
   const card = (d,i) => {
@@ -953,8 +964,10 @@ function render(){ applyProducts(); renderRing(); renderDay(); renderPantry(); r
 $('day').onclick = e => {
   const b = e.target.closest('button'); if(!b) return;
   if(b.dataset.open){ sel = b.dataset.open; renderDay(); $('meal-'+sel).scrollIntoView({behavior:'smooth', block:'start'}); return }
-  if(b.dataset.eat!==undefined){ const d = current[b.dataset.eat];
-    today().log.push({m:sel, n:d.n, k:d.k, p:d.p, c:d.c, g:d.g, pf:d.pf, id:d.id, items:d.items}); move(d.items,-1); sel = undefined; save(); render(); navigator.vibrate?.(20); return }
+  if(b.dataset.eat!==undefined){ const d = current[b.dataset.eat], mealDone = sel;
+    today().log.push({m:sel, n:d.n, k:d.k, p:d.p, c:d.c, g:d.g, pf:d.pf, id:d.id, items:d.items}); move(d.items,-1);
+    if(today().plan) delete today().plan[mealDone];
+    sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; move(today().log[i].items,+1); today().log.splice(i,1); save(); render() }
   if(b.id==='aiAsk' || b.id==='aiRetry'){ aiGenerate(sel); return }
   if(b.dataset.aiban!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].items[b.dataset.aiban].name;
@@ -966,7 +979,9 @@ $('day').onclick = e => {
     move(d.items.map(it=>[it.name, Math.round(it.grams)]), -1); delete aiDish[key]; sel = undefined; save(); render(); navigator.vibrate?.(20) }
 };
 $('day').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
-  today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)}); sel = undefined; save(); render() };
+  today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)});
+  if(today().plan) delete today().plan[sel];
+  sel = undefined; save(); render() };
 $('day').onchange = e => {
   const art = e.target.closest('article.dish'); if(!art) return;
   const i = +art.dataset.i, ov = cardOver[i] ||= {};
@@ -1008,6 +1023,7 @@ $('wForm').onsubmit = e => { e.preventDefault(); S.weights[dk()] = Math.round(+$
 $('advice').onclick = e => { const d = +e.target.dataset.kcal; if(d){ S.kcal = clamp(S.kcal+d, 1200, 4000); $('gk').value = S.kcal; save(); render() } };
 $('mt').onchange = e => { today().mt = e.target.checked; save(); render() };
 $('skip').onchange = e => { S.skip = e.target.checked; sel = undefined; save(); render() };
+$('snackAm').onchange = e => { S.snackMorning = e.target.checked; sel = undefined; save(); render() };
 $('gk').value = S.kcal; $('gp').value = S.prot; $('gGoal').value = S.goal;
 $('gk').onchange = e => { S.kcal = clamp(+e.target.value||1800, 1200, 4000); save(); render() };
 $('gp').onchange = e => { S.prot = clamp(+e.target.value||150, 60, 300); save(); render() };
