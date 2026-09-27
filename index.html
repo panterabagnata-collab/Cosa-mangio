@@ -35,12 +35,12 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 /* tab */
 .sr{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
 [data-tab]{display:none}
-body:has(#t1:checked) [data-tab="1"],body:has(#t2:checked) [data-tab="2"],body:has(#t3:checked) [data-tab="3"]{display:block}
+body:has(#t1:checked) [data-tab="1"],body:has(#t2:checked) [data-tab="2"],body:has(#t3:checked) [data-tab="3"],body:has(#t4:checked) [data-tab="4"]{display:block}
 .tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:rgba(12,17,28,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
 .tabs label{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
-body:has(#t1:checked) [for=t1],body:has(#t2:checked) [for=t2],body:has(#t3:checked) [for=t3]{color:var(--ink)}
-body:has(#t1:checked) [for=t1] svg,body:has(#t2:checked) [for=t2] svg,body:has(#t3:checked) [for=t3] svg{stroke:var(--blue)}
-body:has(#t1:focus-visible) [for=t1],body:has(#t2:focus-visible) [for=t2],body:has(#t3:focus-visible) [for=t3]{outline:2px solid var(--carb);border-radius:10px}
+body:has(#t1:checked) [for=t1],body:has(#t2:checked) [for=t2],body:has(#t3:checked) [for=t3],body:has(#t4:checked) [for=t4]{color:var(--ink)}
+body:has(#t1:checked) [for=t1] svg,body:has(#t2:checked) [for=t2] svg,body:has(#t3:checked) [for=t3] svg,body:has(#t4:checked) [for=t4] svg{stroke:var(--blue)}
+body:has(#t1:focus-visible) [for=t1],body:has(#t2:focus-visible) [for=t2],body:has(#t3:focus-visible) [for=t3],body:has(#t4:focus-visible) [for=t4]{outline:2px solid var(--carb);border-radius:10px}
 
 /* controlli */
 .top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:6px 0 12px;flex-wrap:wrap}
@@ -148,11 +148,12 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
 </style>
 </head>
 <body>
-<input type="radio" name="tab" id="t1" class="sr" checked><input type="radio" name="tab" id="t2" class="sr"><input type="radio" name="tab" id="t3" class="sr">
+<input type="radio" name="tab" id="t1" class="sr" checked><input type="radio" name="tab" id="t2" class="sr"><input type="radio" name="tab" id="t3" class="sr"><input type="radio" name="tab" id="t4" class="sr">
 <nav class="tabs" aria-label="Sezioni">
   <label for="t1"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>Oggi</label>
   <label for="t2"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 9.5h17l-1.8 10h-13.4z"/><path d="M8 9.5l4-5.5 4 5.5M9.5 13.5v3M14.5 13.5v3"/></svg>Dispensa</label>
   <label for="t3"><svg class="i" viewBox="0 0 24 24"><path d="M4 19.5h16"/><path d="M4.5 15l5-5 3.5 3 6.5-7"/></svg>Andamento</label>
+  <label for="t4"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 4-6 7-6s5.5 2 7 6"/></svg>Profilo</label>
 </nav>
 <main>
   <!-- ========== OGGI ========== -->
@@ -217,14 +218,6 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
     <h2 class="sec">Ultimi 7 giorni</h2>
     <section class="card" id="week"></section>
 
-    <h2 class="sec">Obiettivi</h2>
-    <section class="card">
-      <div class="goals">
-        <label>Calorie al giorno<input type="number" id="gk" min="1200" step="50"></label>
-        <label>Proteine al giorno (g)<input type="number" id="gp" min="60" step="5"></label>
-      </div>
-    </section>
-
     <h2 class="sec">Sincronizzazione</h2>
     <section class="card" id="syncBox"></section>
 
@@ -238,6 +231,41 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
         <button class="alt" id="exp">Esporta backup</button>
         <label class="pill" style="border-radius:12px;padding:10px 16px">Importa<input type="file" id="imp" accept="application/json,.json"></label>
       </div>
+    </section>
+  </div>
+
+  <!-- ========== PROFILO ========== -->
+  <div data-tab="4">
+    <header class="top"><div><p class="date">I tuoi dati</p><h1>Profilo</h1></div></header>
+
+    <section class="card">
+      <p class="stat">Peso attuale <b id="pCurW">—</b></p>
+      <div class="form" id="profileForm" style="margin-top:10px">
+        <label>Sesso<select data-p="sex"><option value="m">Maschio</option><option value="f">Femmina</option></select></label>
+        <label>Età<input type="number" data-p="age" min="10" max="100" step="1"></label>
+        <label>Altezza (cm)<input type="number" data-p="height" min="100" max="250" step="0.5"></label>
+        <label>Massa muscolare (kg)<input type="number" data-p="muscle" min="0" max="150" step="0.1"></label>
+        <label>Massa grassa (kg)<input type="number" data-p="fat" min="0" max="150" step="0.1"></label>
+      </div>
+      <p class="muted small" style="margin-top:10px">Il peso di riferimento è quello registrato in Andamento; qui aggiungi solo i dati che l'app non può calcolare da sola.</p>
+    </section>
+
+    <h2 class="sec">Obiettivi</h2>
+    <section class="card">
+      <div class="goals">
+        <label>Calorie al giorno<input type="number" id="gk" min="1200" step="50"></label>
+        <label>Proteine al giorno (g)<input type="number" id="gp" min="60" step="5"></label>
+        <label>Peso obiettivo (kg)<input type="number" id="gGoal" min="30" max="250" step="0.1"></label>
+      </div>
+    </section>
+
+    <h2 class="sec">Gusti</h2>
+    <section class="card">
+      <p class="muted small">Seleziona cosa non ti piace e spostalo in blacklist: l'assistente AI (scheda Oggi) eviterà questi alimenti nelle proposte.</p>
+      <div id="tasteList" style="margin-top:10px"></div>
+      <button id="tasteApply" class="alt" style="margin-top:10px;width:100%">Sposta i selezionati nella blacklist</button>
+      <form id="tasteCustomForm" class="row" style="margin-top:10px"><input type="text" name="n" placeholder="Altro cibo che non ti piace"><button class="alt">Aggiungi</button></form>
+      <div id="tasteBlacklist" style="margin-top:14px"></div>
     </section>
   </div>
 </main>
@@ -442,7 +470,7 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}}, s || {});
+const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}}, s || {});
 S = init(S);
 if(S.pantry){ for(const n of S.pantry) if(F[n] && !tracked(n)) S.stock[n] = 1; delete S.pantry }
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
@@ -491,7 +519,7 @@ function renderSync(){
 }
 
 // ---------- assistente AI (idee su misura oltre alle ricette fisse; chiave solo su questo dispositivo) ----------
-const AI_KEY = 'cosa-mangio-oggi-ai', AI_MODEL = 'gemini-3.8-flash';
+const AI_KEY = 'cosa-mangio-oggi-ai', AI_MODEL = 'gemini-3.8-flash', AI_MODEL_FALLBACK = 'gemini-3.5-flash-lite';
 const AI_EXCLUDED = 'legumi, frutta secca, avena, cereali da colazione, tonno, salmone, fiocchi di latte';
 const DISH_SCHEMA = {type:'OBJECT', properties:{
   name:{type:'STRING'},
@@ -501,16 +529,28 @@ const DISH_SCHEMA = {type:'OBJECT', properties:{
 let ai; try{ ai = JSON.parse(localStorage.getItem(AI_KEY)) }catch(e){}
 const aiPersist = () => { try{ ai ? localStorage.setItem(AI_KEY, JSON.stringify(ai)) : localStorage.removeItem(AI_KEY) }catch(e){} };
 let aiDish = {};
-async function askGemini(prompt){
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${ai.key}`, {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function callGemini(model, prompt){
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ai.key}`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({contents:[{parts:[{text:prompt}]}], generationConfig:{responseMimeType:'application/json', responseSchema:DISH_SCHEMA}})
   });
   const j = await r.json().catch(()=>null);
-  if(!r.ok) throw new Error(j?.error?.message || ('HTTP '+r.status));
+  if(!r.ok){ const e = new Error(j?.error?.message || ('HTTP '+r.status)); e.status = r.status; throw e }
   const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
   if(!text) throw new Error('risposta vuota');
   return JSON.parse(text);
+}
+// il modello principale a volte è sovraccarico (503 "high demand"): un retry e poi un modello di riserva bastano quasi sempre
+async function askGemini(prompt){
+  const plan = [[AI_MODEL,0], [AI_MODEL,1200], [AI_MODEL_FALLBACK,0]];
+  let lastErr;
+  for(const [model,delay] of plan){
+    if(delay) await sleep(delay);
+    try{ return await callGemini(model, prompt) }
+    catch(e){ lastErr = e; if(e.status!==503 && e.status!==429) throw e }
+  }
+  throw lastErr;
 }
 function aiPrompt(meal, t, avoidIngredient, avoidDish){
   const inStock = Object.keys(F).filter(n => av(n) > 0).map(n => tracked(n) ? `${n} (${Math.round(S.stock[n])} g)` : n);
@@ -551,12 +591,23 @@ function aiCardHTML(meal){
   </article>`;
 }
 function renderAiKeyBox(){
-  const bl = S.dislikes, tag = (label,key) => `<button type="button" class="pill" data-unban="${esc(key)}" style="gap:4px">${esc(label)}${X_ICON}</button>`;
-  $('aiKeyBox').innerHTML = (ai
-    ? `<p class="muted small">Nella scheda Oggi puoi chiedere idee AI in base a dispensa e gusti, oltre alle ricette fisse.</p><button class="ghost" id="aiOff" style="margin-top:6px">Rimuovi chiave</button>`
+  $('aiKeyBox').innerHTML = ai
+    ? `<p class="muted small">Nella scheda Oggi puoi chiedere idee AI in base a dispensa e gusti (scheda Profilo), oltre alle ricette fisse.</p><button class="ghost" id="aiOff" style="margin-top:6px">Rimuovi chiave</button>`
     : `<p class="muted small">Incolla una <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:var(--blue)">API key Gemini gratuita</a> per avere idee AI in base a dispensa e gusti.</p>
-      <form id="aiKeyForm" class="row" style="margin-top:10px"><input type="password" name="k" placeholder="API key Gemini" autocomplete="off" required><button>Salva</button></form>`)
-    + (bl.foods.length || bl.dishes.length ? `<div class="row" style="flex-wrap:wrap;margin-top:10px">${bl.foods.map(n=>tag(n,'f:'+n)).join('')}${bl.dishes.map(n=>tag(n,'d:'+n)).join('')}</div>` : '');
+      <form id="aiKeyForm" class="row" style="margin-top:10px"><input type="password" name="k" placeholder="API key Gemini" autocomplete="off" required><button>Salva</button></form>`;
+}
+function renderProfileHead(){
+  const now = new Date(dk()+'T12:00:00'), tr = trend(S.weights, now);
+  $('pCurW').textContent = tr?.avg!=null ? nf(tr.avg,1)+' kg (media)' : tr?.last!=null ? nf(tr.last,1)+' kg' : '—';
+}
+function renderTaste(){
+  const groups = {};
+  for(const n in F) (groups[F[n].cat] ||= []).push(n);
+  $('tasteList').innerHTML = Object.entries(groups).map(([g,ns]) => `<h3 class="cat">${esc(g)}</h3><div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>`).join('');
+  const bl = S.dislikes, tag = (label,key) => `<button type="button" class="pill" data-unban="${esc(key)}" style="gap:4px">${esc(label)}${X_ICON}</button>`;
+  $('tasteBlacklist').innerHTML = (bl.foods.length || bl.dishes.length)
+    ? `<p class="muted small" style="margin-bottom:8px">In blacklist:</p><div class="row" style="flex-wrap:wrap">${bl.foods.map(n=>tag(n,'f:'+n)).join('')}${bl.dishes.map(n=>tag(n,'d:'+n)).join('')}</div>`
+    : `<p class="muted small">Nessun alimento in blacklist.</p>`;
 }
 const dk = (d=new Date()) => d.toLocaleDateString('sv');
 const today = () => S.days[dk()] ||= {mt:false, log:[]};
@@ -767,7 +818,7 @@ function renderWeek(){
   <p class="note ${bal>500?'warn':'good'}">${bal>0?`Sopra l’obiettivo di ${nf(bal)} kcal in questi giorni.`:`Sotto l’obiettivo di ${nf(-bal)} kcal in questi giorni.`}${bal>500?' Non recuperare saltando pasti: riprendi il piano normale, il percorso si allunga solo un po’.':''}</p>` : ''}`;
 }
 
-function render(){ applyProducts(); renderRing(); renderDay(); renderPantry(); renderShop(); renderProds(); renderTrend(); renderWeek() }
+function render(){ applyProducts(); renderRing(); renderDay(); renderPantry(); renderShop(); renderProds(); renderTrend(); renderWeek(); renderProfileHead() }
 
 // ---------- eventi ----------
 $('day').onclick = e => {
@@ -828,9 +879,19 @@ $('wForm').onsubmit = e => { e.preventDefault(); S.weights[dk()] = Math.round(+$
 $('advice').onclick = e => { const d = +e.target.dataset.kcal; if(d){ S.kcal = clamp(S.kcal+d, 1200, 4000); $('gk').value = S.kcal; save(); render() } };
 $('mt').onchange = e => { today().mt = e.target.checked; save(); render() };
 $('skip').onchange = e => { S.skip = e.target.checked; sel = undefined; save(); render() };
-$('gk').value = S.kcal; $('gp').value = S.prot;
+$('gk').value = S.kcal; $('gp').value = S.prot; $('gGoal').value = S.goal;
 $('gk').onchange = e => { S.kcal = clamp(+e.target.value||1800, 1200, 4000); save(); render() };
 $('gp').onchange = e => { S.prot = clamp(+e.target.value||150, 60, 300); save(); render() };
+$('gGoal').onchange = e => { S.goal = clamp(+e.target.value||70.3, 30, 250); save(); render() };
+$('profileForm').querySelectorAll('[data-p]').forEach(el => el.value = S.profile[el.dataset.p] ?? '');
+$('profileForm').onchange = e => { const k = e.target.dataset.p; if(!k) return; S.profile[k] = e.target.value; save() };
+$('tasteApply').onclick = () => { const checked = [...document.querySelectorAll('#tasteList input:checked')];
+  for(const i of checked){ if(!S.dislikes.foods.includes(i.value)) S.dislikes.foods.push(i.value); i.checked = false } save(); renderTaste() };
+$('tasteCustomForm').onsubmit = e => { e.preventDefault(); const n = new FormData(e.target).get('n').trim();
+  if(n && !S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); e.target.reset(); save(); renderTaste() };
+$('tasteBlacklist').onclick = e => { const un = e.target.closest('[data-unban]')?.dataset.unban; if(!un) return;
+  const [kind, ...rest] = un.split(':'), name = rest.join(':'), list = kind==='f' ? S.dislikes.foods : S.dislikes.dishes;
+  list.splice(list.indexOf(name), 1); save(); renderTaste() };
 $('exp').onclick = () => { const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(S)], {type:'application/json'})); a.download = `cosa-mangio-oggi-${dk()}.json`; a.click(); URL.revokeObjectURL(a.href) };
 $('imp').onchange = async e => { const f = e.target.files[0]; if(!f) return;
@@ -840,17 +901,13 @@ $('imp').onchange = async e => { const f = e.target.files[0]; if(!f) return;
 $('syncBox').onsubmit = e => { e.preventDefault(); const tok = new FormData(e.target).get('tok').trim(); if(tok) syncConnect(tok) };
 $('syncBox').onclick = e => { if(e.target.id==='syncOff' && confirm('Scollegare la sincronizzazione su questo dispositivo? Il gist su GitHub non viene cancellato.')) syncDisconnect() };
 $('aiKeyBox').onsubmit = e => { e.preventDefault(); const k = new FormData(e.target).get('k').trim(); if(k){ ai = {key:k}; aiPersist(); renderAiKeyBox() } };
-$('aiKeyBox').onclick = e => {
-  if(e.target.id==='aiOff' && confirm('Rimuovere la chiave AI da questo dispositivo?')){ ai = null; aiPersist(); renderAiKeyBox(); return }
-  const un = e.target.closest('[data-unban]')?.dataset.unban; if(!un) return;
-  const [kind, ...rest] = un.split(':'), name = rest.join(':'), list = kind==='f' ? S.dislikes.foods : S.dislikes.dishes;
-  list.splice(list.indexOf(name), 1); save(); renderAiKeyBox();
-};
+$('aiKeyBox').onclick = e => { if(e.target.id==='aiOff' && confirm('Rimuovere la chiave AI da questo dispositivo?')){ ai = null; aiPersist(); renderAiKeyBox() } };
 document.addEventListener('visibilitychange', () => document.visibilityState==='visible' && (render(), syncPull()));
 
 render();
 renderSync();
 renderAiKeyBox();
+renderTaste();
 syncPull();
 if(location.hash==='#test') console.log(selfTest());
 </script>
