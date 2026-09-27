@@ -609,10 +609,21 @@ function renderProfileHead(){
   const now = new Date(dk()+'T12:00:00'), tr = trend(S.weights, now);
   $('pCurW').textContent = tr?.avg!=null ? nf(tr.avg,1)+' kg (media)' : tr?.last!=null ? nf(tr.last,1)+' kg' : '—';
 }
+// lista larga per la checklist gusti: solo nomi, non tocca F/dispensa/ricette
+const TASTE_LIST = {
+  'Carne': ['pollo','tacchino','manzo','vitello','maiale','agnello','coniglio','anatra','cavallo','salsiccia','prosciutto crudo','prosciutto cotto','salame','bresaola','speck','pancetta','mortadella','wurstel','fegato','trippa'],
+  'Pesce e frutti di mare': ['merluzzo','baccalà','stoccafisso','salmone','tonno','orata','branzino','sogliola','trota','sgombro','alici','acciughe','sardine','gamberetti','gamberoni','scampi','calamari','seppie','polpo','cozze','vongole','capesante','granchio','aragosta','pesce spada'],
+  'Uova e latticini': ['uova','latte','mozzarella','mozzarella di bufala','parmigiano','grana padano','pecorino','ricotta','mascarpone','burrata','stracchino','gorgonzola','provola','provolone','scamorza','caciocavallo','burro','panna','yogurt','fiocchi di latte'],
+  'Cereali, pasta e carboidrati': ['pasta','riso','pane','farro','orzo','polenta','couscous','patate','gnocchi','pizza','focaccia','fette biscottate','gallette','cereali da colazione','avena','quinoa','grissini','taralli'],
+  'Legumi': ['fagioli','ceci','lenticchie','piselli','fave','soia','edamame'],
+  'Verdura': ['pomodoro','zucchine','melanzane','peperoni','carote','cipolla','aglio','scalogno','spinaci','broccoli','cavolfiore','cavolo','verza','funghi','insalata','lattuga','rucola','sedano','finocchio','zucca','bietole','asparagi','carciofi','cetrioli','ravanelli','porri','radicchio'],
+  'Frutta': ['mela','pera','banana','arancia','mandarino','limone','pompelmo','fragole','uva','kiwi','ananas','pesca','albicocche','prugne','ciliegie','anguria','melone','fichi','cachi','mirtilli','lamponi','more','melograno','cocco'],
+  'Frutta secca e semi': ['noci','mandorle','nocciole','pistacchi','arachidi','anacardi','semi di zucca','semi di girasole','semi di lino','uvetta','datteri'],
+  'Condimenti, erbe e spezie': ['olio EVO','olio di semi','aceto balsamico','aceto di vino','sale','pepe','peperoncino','basilico','rosmarino','origano','prezzemolo','salvia','timo','alloro','senape','maionese','ketchup','salsa di soia','pesto','sugo di pomodoro','curry','zenzero','curcuma','cannella','noce moscata'],
+  'Altro': ['tofu','seitan','tempeh','funghi porcini','tartufo','olive','capperi','cioccolato','miele','marmellata','nutella','caffè','tè'],
+};
 function renderTaste(){
-  const groups = {};
-  for(const n in F) (groups[F[n].cat] ||= []).push(n);
-  $('tasteList').innerHTML = Object.entries(groups).map(([g,ns]) => `<h3 class="cat">${esc(g)}</h3><div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>`).join('');
+  $('tasteList').innerHTML = Object.entries(TASTE_LIST).map(([g,ns]) => `<h3 class="cat">${esc(g)}</h3><div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>`).join('');
   const bl = S.dislikes, tag = (label,key) => `<button type="button" class="pill" data-unban="${esc(key)}" style="gap:4px">${esc(label)}${X_ICON}</button>`;
   $('tasteBlacklist').innerHTML = (bl.foods.length || bl.dishes.length)
     ? `<p class="muted small" style="margin-bottom:8px">In blacklist:</p><div class="row" style="flex-wrap:wrap">${bl.foods.map(n=>tag(n,'f:'+n)).join('')}${bl.dishes.map(n=>tag(n,'d:'+n)).join('')}</div>`
