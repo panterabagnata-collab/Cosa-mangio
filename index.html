@@ -150,7 +150,7 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
 <body>
 <input type="radio" name="tab" id="t1" class="sr" checked><input type="radio" name="tab" id="t2" class="sr"><input type="radio" name="tab" id="t3" class="sr"><input type="radio" name="tab" id="t4" class="sr">
 <nav class="tabs" aria-label="Sezioni">
-  <label for="t1"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>Oggi</label>
+  <label for="t1"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></svg>Piano</label>
   <label for="t2"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 9.5h17l-1.8 10h-13.4z"/><path d="M8 9.5l4-5.5 4 5.5M9.5 13.5v3M14.5 13.5v3"/></svg>Dispensa</label>
   <label for="t3"><svg class="i" viewBox="0 0 24 24"><path d="M4 19.5h16"/><path d="M4.5 15l5-5 3.5 3 6.5-7"/></svg>Andamento</label>
   <label for="t4"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 4-6 7-6s5.5 2 7 6"/></svg>Profilo</label>
@@ -179,6 +179,13 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
       <p class="wlink" id="wHint"></p>
     </section>
     <div id="day"></div>
+
+    <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:26px">
+      <h2 class="sec" style="margin:0">Prossimi giorni</h2>
+      <select id="planMode" style="width:auto"><option value="stock">Solo quello che ho</option><option value="free">Tutto quello che mi piace</option></select>
+    </div>
+    <p class="muted small">Anteprima: quando un giorno arriva, i suggerimenti sopra si ricalcolano al momento.</p>
+    <div id="planDays"></div>
   </div>
 
   <!-- ========== DISPENSA ========== -->
@@ -470,7 +477,7 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}}, s || {});
+const init = s => Object.assign({stock:{}, skip:true, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}, planMode:'stock'}, s || {});
 S = init(S);
 if(S.pantry){ for(const n of S.pantry) if(F[n] && !tracked(n)) S.stock[n] = 1; delete S.pantry }
 const persist = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
@@ -565,15 +572,17 @@ function aiPrompt(meal, t, avoidIngredient, avoidDish){
     `Rispondi solo con il JSON richiesto: nome del piatto, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi.`
   ].filter(Boolean).join('\n');
 }
+const aiKeyOf = (dateKey, meal) => dateKey+'|'+meal;
 async function aiGenerate(meal, avoidIngredient, avoidDish){
-  if(!ai){ aiDish[meal] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
-  aiDish[meal] = 'loading'; renderDay();
-  try{ aiDish[meal] = await askGemini(aiPrompt(meal, mealTarget(meal), avoidIngredient, avoidDish)) }
-  catch(e){ aiDish[meal] = {error: 'AI non disponibile: '+e.message} }
+  const key = aiKeyOf(dk(), meal);
+  if(!ai){ aiDish[key] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
+  aiDish[key] = 'loading'; renderDay();
+  try{ aiDish[key] = await askGemini(aiPrompt(meal, mealTarget(meal), avoidIngredient, avoidDish)) }
+  catch(e){ aiDish[key] = {error: 'AI non disponibile: '+e.message} }
   renderDay();
 }
 function aiCardHTML(meal){
-  const d = aiDish[meal];
+  const d = aiDish[aiKeyOf(dk(), meal)];
   if(!d) return `<button class="alt" id="aiAsk" style="margin-top:10px;width:100%">Chiedi un’idea all’AI</button>`;
   if(d === 'loading') return `<p class="note">Chiedo un’idea all’AI…</p>`;
   if(d.error) return `<p class="note warn">${esc(d.error)}</p><button class="alt" id="aiRetry" style="margin-top:8px">Riprova</button>`;
@@ -610,7 +619,8 @@ function renderTaste(){
     : `<p class="muted small">Nessun alimento in blacklist.</p>`;
 }
 const dk = (d=new Date()) => d.toLocaleDateString('sv');
-const today = () => S.days[dk()] ||= {mt:false, log:[]};
+const dayAt = k => S.days[k] ||= {mt:false, log:[]};
+const today = () => dayAt(dk());
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nf = (n,d=0) => Number(n).toLocaleString('it-IT',{maximumFractionDigits:d,minimumFractionDigits:d});
@@ -626,14 +636,16 @@ function applyProducts(){
   for(const pr of Object.values(S.products).sort((a,b)=>a.t-b.t)) if(F[pr.base] && pr.k!=='') Object.assign(F[pr.base], {k:+pr.k,p:+pr.p||0,c:+pr.c||0,g:+pr.g||0});
 }
 function totals(log){ return log.reduce((t,e)=>({k:t.k+e.k, p:t.p+(e.p||0), c:t.c+(e.c||0), g:t.g+(e.g||0)}), {k:0,p:0,c:0,g:0}) }
-function budget(){ const d=today(), K=S.kcal+(d.mt?100:0), G=Math.round(K*.25/9); return {K, P:S.prot, G, C:Math.round((K-S.prot*4-G*9)/4), eaten:totals(d.log)} }
-function mealTarget(meal){
-  const {K,P,eaten} = budget(), sh = S.skip ? SHARE.skip : SHARE.full;
-  const done = new Set(today().log.map(e=>e.m));
+function budgetFor(d){ const K=S.kcal+(d.mt?100:0), G=Math.round(K*.25/9); return {K, P:S.prot, G, C:Math.round((K-S.prot*4-G*9)/4), eaten:totals(d.log)} }
+function mealTargetFor(d, meal){
+  const {K,P,eaten} = budgetFor(d), sh = S.skip ? SHARE.skip : SHARE.full;
+  const done = new Set(d.log.map(e=>e.m));
   const rest = plan().filter(m => m===meal || !done.has(m));
   const w = sh[meal] / rest.reduce((a,m)=>a+sh[m], 0);
   return {k:Math.max(0,K-eaten.k)*w, p:Math.max(0,P-eaten.p)*w};
 }
+const budget = () => budgetFor(today());
+const mealTarget = meal => mealTargetFor(today(), meal);
 
 // ---------- OGGI ----------
 function renderRing(){
@@ -696,6 +708,53 @@ function renderDay(){
     </section>` }).join('');
 }
 const move = (items, sign) => { for(const [n,g] of items||[]) if(F[n] && tracked(n) && g) S.stock[n] = Math.max(0, (S.stock[n]||0) + sign*g) };
+
+// ---------- PIANO (anteprima prossimi giorni) ----------
+function planCardHTML(dateKey, meal){
+  const d = dayAt(dateKey), dish = d.plan?.[meal], key = aiKeyOf(dateKey, meal);
+  const row = (right, extra='') => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div class="row" style="justify-content:space-between"><span>${cap(meal)}</span>${right}</div>${extra}</div>`;
+  if(dish === 'loading') return row('<span class="muted small">Genero…</span>');
+  if(dish?.error) return row('', `<p class="muted small" style="color:var(--prot)">${esc(dish.error)}</p><button class="ghost" data-plan-fixed="${key}" style="margin-top:6px">Riprova</button>`);
+  if(dish === null) return row('<span class="muted small">nessun piatto</span>', `<button class="ghost" data-plan-fixed="${key}" style="margin-top:6px">Riprova</button>`);
+  if(!dish) return row(`<button class="ghost" data-plan-fixed="${key}">Genera</button>`);
+  const name = dish.n || dish.name;
+  return row(`<span class="muted small">${Math.round(dish.k)} kcal</span>`,
+    `<p style="margin-top:2px">${esc(name)}${dish.ai ? ' <span class="muted small">(~AI)</span>' : ''}</p>
+     <div class="row" style="margin-top:6px;gap:6px">
+       <button class="ghost" data-plan-fixed="${key}">Cambia</button>
+       ${ai ? `<button class="ghost" data-plan-ai="${key}">Idea AI</button>` : ''}
+     </div>`);
+}
+function renderPlanDays(){
+  $('planMode').value = S.planMode;
+  const avp = n => S.planMode==='free' ? Infinity : av(n);
+  const days = [1,2,3,4,5,6].map(i => {
+    const date = new Date(Date.now()+i*DAY), key = dk(date), d = dayAt(key);
+    d.plan ||= {};
+    for(const m of plan()) if(d.plan[m] === undefined){ const t = mealTargetFor(d, m), {ok} = suggest(m, avp, t, d.log, key); d.plan[m] = ok[0] || null }
+    return {i, key, date, d};
+  });
+  persist();
+  $('planDays').innerHTML = days.map(({i,key,date,d}) => `<section class="card" style="margin-top:10px" data-day="${key}">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <h3>${i===1?'Domani':cap(date.toLocaleDateString('it-IT',{weekday:'long'}))} <span class="muted small">${date.toLocaleDateString('it-IT',{day:'numeric',month:'short'})}</span></h3>
+      <label class="pill" style="padding:4px 10px"><input type="checkbox" data-plan-mt="${key}" ${d.mt?'checked':''}>Muay Thai</label>
+    </div>
+    ${plan().map(m => planCardHTML(key, m)).join('')}
+  </section>`).join('');
+}
+async function planAiGenerate(dateKey, meal, avoidIngredient, avoidDish){
+  const d = dayAt(dateKey); d.plan ||= {};
+  if(!ai){ d.plan[meal] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderPlanDays(); return }
+  d.plan[meal] = 'loading'; renderPlanDays();
+  try{
+    const dish = await askGemini(aiPrompt(meal, mealTargetFor(d, meal), avoidIngredient, avoidDish));
+    const t = dish.items.reduce((a,it)=>({k:a.k+(+it.k||0),p:a.p+(+it.p||0),c:a.c+(+it.c||0),g:a.g+(+it.g||0)}),{k:0,p:0,c:0,g:0});
+    Object.assign(dish, {ai:true, n:dish.name, k:Math.round(t.k), p:Math.round(t.p*10)/10, c:Math.round(t.c*10)/10, g:Math.round(t.g*10)/10});
+    d.plan[meal] = dish;
+  }catch(e){ d.plan[meal] = {error:'AI non disponibile: '+e.message} }
+  save(); renderPlanDays();
+}
 
 // ---------- DISPENSA ----------
 function renderPantry(){
@@ -828,13 +887,13 @@ $('day').onclick = e => {
     today().log.push({m:sel, n:d.n, k:d.k, p:d.p, c:d.c, g:d.g, pf:d.pf, id:d.id, items:d.items}); move(d.items,-1); sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; move(today().log[i].items,+1); today().log.splice(i,1); save(); render() }
   if(b.id==='aiAsk' || b.id==='aiRetry'){ aiGenerate(sel); return }
-  if(b.dataset.aiban!==undefined){ const n = aiDish[sel].items[b.dataset.aiban].name;
+  if(b.dataset.aiban!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].items[b.dataset.aiban].name;
     if(!S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); save(); aiGenerate(sel, n); return }
-  if(b.dataset.aidish!==undefined){ const n = aiDish[sel].name;
+  if(b.dataset.aidish!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].name;
     if(!S.dislikes.dishes.includes(n)) S.dislikes.dishes.push(n); save(); aiGenerate(sel, null, n); return }
-  if(b.dataset.aieat!==undefined){ const d = aiDish[sel], t = d.items.reduce((a,it)=>({k:a.k+(+it.k||0),p:a.p+(+it.p||0),c:a.c+(+it.c||0),g:a.g+(+it.g||0)}),{k:0,p:0,c:0,g:0});
+  if(b.dataset.aieat!==undefined){ const key = aiKeyOf(dk(),sel), d = aiDish[key], t = d.items.reduce((a,it)=>({k:a.k+(+it.k||0),p:a.p+(+it.p||0),c:a.c+(+it.c||0),g:a.g+(+it.g||0)}),{k:0,p:0,c:0,g:0});
     today().log.push({m:sel, n:d.name, k:Math.round(t.k), p:Math.round(t.p), c:Math.round(t.c), g:Math.round(t.g), ai:true});
-    move(d.items.map(it=>[it.name, Math.round(it.grams)]), -1); delete aiDish[sel]; sel = undefined; save(); render(); navigator.vibrate?.(20) }
+    move(d.items.map(it=>[it.name, Math.round(it.grams)]), -1); delete aiDish[key]; sel = undefined; save(); render(); navigator.vibrate?.(20) }
 };
 $('day').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
   today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)}); sel = undefined; save(); render() };
@@ -902,12 +961,26 @@ $('syncBox').onsubmit = e => { e.preventDefault(); const tok = new FormData(e.ta
 $('syncBox').onclick = e => { if(e.target.id==='syncOff' && confirm('Scollegare la sincronizzazione su questo dispositivo? Il gist su GitHub non viene cancellato.')) syncDisconnect() };
 $('aiKeyBox').onsubmit = e => { e.preventDefault(); const k = new FormData(e.target).get('k').trim(); if(k){ ai = {key:k}; aiPersist(); renderAiKeyBox() } };
 $('aiKeyBox').onclick = e => { if(e.target.id==='aiOff' && confirm('Rimuovere la chiave AI da questo dispositivo?')){ ai = null; aiPersist(); renderAiKeyBox() } };
+$('planMode').onchange = e => { S.planMode = e.target.value;
+  for(let i=1;i<=6;i++) dayAt(dk(new Date(Date.now()+i*DAY))).plan = {};
+  save(); renderPlanDays() };
+$('planDays').onchange = e => { const key = e.target.dataset.planMt; if(key===undefined) return;
+  dayAt(key).mt = e.target.checked; save(); renderPlanDays() };
+$('planDays').onclick = e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.planFixed){ const [dateKey, meal] = b.dataset.planFixed.split('|'), d = dayAt(dateKey), avp = n => S.planMode==='free' ? Infinity : av(n);
+    const tries = (d.planTry ||= {}); tries[meal] = (tries[meal]||0) + 1;
+    const t = mealTargetFor(d, meal), {ok} = suggest(meal, avp, t, d.log, dateKey+':'+tries[meal]);
+    d.plan[meal] = ok[0] || null; save(); renderPlanDays(); return }
+  if(b.dataset.planAi){ const [dateKey, meal] = b.dataset.planAi.split('|'); planAiGenerate(dateKey, meal) }
+};
 document.addEventListener('visibilitychange', () => document.visibilityState==='visible' && (render(), syncPull()));
 
 render();
 renderSync();
 renderAiKeyBox();
 renderTaste();
+renderPlanDays();
 syncPull();
 if(location.hash==='#test') console.log(selfTest());
 </script>
