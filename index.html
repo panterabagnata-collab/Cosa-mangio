@@ -647,6 +647,14 @@ function swapPrompt(dish, it, newName){
     `Rispondi solo con il JSON richiesto per il nuovo ingrediente: nome, grammi e valori nutrizionali per quella quantità (non per 100 g).`
   ].join('\n');
 }
+function addPrompt(dish, addName){
+  return [
+    `Nel piatto "${dish.name}" (ingredienti: ${dish.items.map(x=>Math.round(x.grams)+'g '+x.name).join(', ')}),`,
+    `aggiungi "${addName}" come ingrediente in più, con una quantità e valori nutrizionali che abbiano senso nel piatto (es. un condimento va in piccola quantità, un contorno in quantità piena).`,
+    `Non usare MAI questi alimenti: ${AI_EXCLUDED}${S.dislikes.foods.length ? ', ' + S.dislikes.foods.join(', ') : ''}.`,
+    `Rispondi solo con il JSON richiesto per il nuovo ingrediente: nome, grammi e valori nutrizionali per quella quantità (non per 100 g).`
+  ].join('\n');
+}
 let aiSwapping = false;
 async function aiSwapIngredient(meal, i){
   if(aiSwapping) return;
@@ -655,6 +663,16 @@ async function aiSwapIngredient(meal, i){
   if(!newName?.trim()) return;
   aiSwapping = true;
   try{ d.items[i] = await askGemini(swapPrompt(d, d.items[i], newName.trim()), ITEM_SCHEMA) }
+  catch(e){ alert('AI non disponibile: '+e.message) }
+  aiSwapping = false; renderDay();
+}
+async function aiAddIngredient(meal){
+  if(aiSwapping) return;
+  const key = aiKeyOf(dk(), meal), d = aiDish[key];
+  const addName = prompt('Aggiungi ingrediente (es. parmigiano, sugo, olio):');
+  if(!addName?.trim()) return;
+  aiSwapping = true;
+  try{ d.items.push(await askGemini(addPrompt(d, addName.trim()), ITEM_SCHEMA)) }
   catch(e){ alert('AI non disponibile: '+e.message) }
   aiSwapping = false; renderDay();
 }
@@ -761,6 +779,7 @@ function aiCardHTML(meal){
     ${proteinBadge({k:t.k,p:t.p})}
     <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><span class="row" style="gap:4px"><button class="ghost" data-aiswap="${i}" aria-label="Sostituisci ${esc(it.name)}">↔</button><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></span></li>`).join('')}</ul>
     <p class="muted small" style="margin-top:8px">${esc(d.prep)}</p>
+    <button class="ghost" data-aiaddon="1" style="margin-top:6px">+ Aggiungi ingrediente</button>
     ${macroFooter({k:Math.round(t.k),p:r1(t.p),c:r1(t.c),g:r1(t.g)}, 0, `<button data-aieat="1">L’ho mangiato</button>`)}
     <button class="ghost" data-aidish="1" style="margin-top:6px">Non mi piace questo piatto</button>
   </article>`;
@@ -1217,6 +1236,7 @@ $('day').onclick = e => {
     today().log.push({m:sel, n:dish.n, k:dish.k, p:dish.p, c:dish.c, g:dish.g, ai:true});
     delete aiDish[key]; sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.aiswap!==undefined){ aiSwapIngredient(sel, +b.dataset.aiswap); return }
+  if(b.dataset.aiaddon!==undefined){ aiAddIngredient(sel); return }
   if(b.dataset.aiban!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].items[b.dataset.aiban].name;
     if(!S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); save(); aiGenerate(sel, n); return }
   if(b.dataset.aidish!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].name;
