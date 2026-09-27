@@ -935,13 +935,67 @@ function renderRing(){
   $('mt').checked = today().mt; $('skip').checked = S.skip; $('snackAm').checked = S.snackMorning;
 }
 
+// alimenti pronti da mangiare così come sono (niente cottura), per i suggerimenti "completa i valori di oggi"
+const QUICK_SNACKS = ['prosciutto crudo','bresaola','parmigiano','pecorino','mozzarella light','mela','albicocche','gallette','fette biscottate'];
+let quickPicks = [];
+function quickFillHTML(){
+  const b = budget(), leftK = b.K-b.eaten.k, leftP = b.P-b.eaten.p;
+  quickPicks = QUICK_SNACKS.filter(n => av(n) > 0).map(n => {
+    const grams = F[n].u ? F[n].u[0] : (F[n].lo || 30);
+    return {n, grams, k:F[n].k*grams/100, p:F[n].p*grams/100, c:F[n].c*grams/100, g:F[n].g*grams/100};
+  }).filter(x => x.k <= leftK + 30).sort((a,b) => leftP > 5 ? b.p-a.p : a.k-b.k).slice(0,3);
+  if(leftK < 40 || !quickPicks.length) return '';
+  return `<div style="margin-top:14px">
+    <p class="muted small">Per avvicinarti agli obiettivi di oggi (mancano ${nf(Math.max(0,leftK))} kcal e ${nf(Math.max(0,leftP))} g di proteine):</p>
+    <ul class="eaten" style="margin-top:6px">${quickPicks.map((x,i) => `<li><span>${esc(label(x.n,x.grams))}<br><small>${Math.round(x.k)} kcal · P ${Math.round(x.p*10)/10} · C ${Math.round(x.c*10)/10} · G ${Math.round(x.g*10)/10}</small></span><button data-quickfill="${i}">Mangiato</button></li>`).join('')}</ul>
+  </div>`;
+}
+const MEAL_EST_SCHEMA = {type:'OBJECT', properties:{question:{type:'STRING'}, k:{type:'NUMBER'}, p:{type:'NUMBER'}, c:{type:'NUMBER'}, g:{type:'NUMBER'}}, required:['k','p','c','g']};
+function outsidePrompt(desc, history){
+  return [
+    `Stima i valori nutrizionali totali di questo pasto mangiato fuori casa (o non pesato), descritto dall'utente: "${desc}".`,
+    history.length ? `Dettagli aggiuntivi forniti dall'utente:\n` + history.map(h=>`- ${h.q} → ${h.a}`).join('\n') : '',
+    `Dai comunque la stima migliore possibile di kcal, proteine, carboidrati, grassi anche se la descrizione è incompleta.`,
+    `Se una domanda breve e specifica (dimensione della porzione, tipo di condimento, quantità...) migliorerebbe molto la stima, scrivila nel campo "question"; altrimenti lascia "question" vuoto.`,
+    `Rispondi solo con il JSON richiesto.`
+  ].filter(Boolean).join('\n');
+}
+let outState = {};
+async function outEstimate(meal, desc, history){
+  const key = aiKeyOf(dk(), meal);
+  if(!ai){ outState[key] = {desc, history, error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
+  outState[key] = {desc, history, loading:true}; renderDay();
+  try{
+    const r = await askGemini(outsidePrompt(desc, history), MEAL_EST_SCHEMA);
+    outState[key] = {desc, history, k:r.k, p:r.p, c:r.c, g:r.g, question:r.question||''};
+  }catch(e){ outState[key] = {desc, history, error:'AI non disponibile: '+e.message} }
+  renderDay();
+}
+function outHTML(meal){
+  const key = aiKeyOf(dk(), meal), s = outState[key];
+  const body = !s ? `<form data-outask><textarea name="d" rows="2" placeholder="Es. panino con hamburger, patatine fritte e una lattina di cola" style="width:100%;resize:vertical" required></textarea><button class="alt" style="margin-top:6px">Stima con AI</button></form>`
+    : s.loading ? `<p class="note">Stimo i valori…</p>`
+    : s.error ? `<p class="note warn">${esc(s.error)}</p><button class="ghost" data-outretry="1" style="margin-top:6px">Riprova</button>`
+    : `<div>
+        ${s.question ? `<p class="muted small">${esc(s.question)}</p><form data-outanswer class="row" style="margin-top:6px"><input type="text" name="a" placeholder="Rispondi…" style="flex:1"><button class="alt">Aggiorna stima</button></form>` : ''}
+        <form data-outadd class="add" style="margin-top:10px">
+          <input type="number" name="k" value="${Math.round(s.k)}" placeholder="kcal" min="0" required>
+          <input type="number" name="p" value="${Math.round(s.p*10)/10}" placeholder="prot. g" min="0" step="0.1">
+          <input type="number" name="c" value="${Math.round(s.c*10)/10}" placeholder="carb. g" min="0" step="0.1">
+          <input type="number" name="g" value="${Math.round(s.g*10)/10}" placeholder="grassi g" min="0" step="0.1">
+          <button class="alt">Aggiungi</button>
+        </form>
+        <button class="ghost" data-outreset="1" style="margin-top:6px">Ricomincia</button>
+      </div>`;
+  return `<details style="margin-top:10px"><summary>Ho mangiato fuori o non ho pesato: descrivilo</summary><div style="margin-top:8px">${body}</div></details>`;
+}
 function suggHTML(){
   if(cardOverMeal !== sel){ cardOver = {}; cardOverMeal = sel }
   const t = mealTarget(sel), {K,eaten} = budget();
   const head = `<p class="target">Per questo pasto: circa <b style="color:var(--ink)">${nf(Math.round(t.k/10)*10)} kcal</b> e <b style="color:var(--ink)">${Math.round(t.p)} g</b> di proteine.</p>`;
   const add = `<form class="add" data-add><input type="text" name="n" placeholder="Altro (es. pizza con amici)" aria-label="Cosa hai mangiato" required><input type="number" name="k" placeholder="kcal" aria-label="Calorie" min="0" required><input type="number" name="p" placeholder="prot. g" aria-label="Proteine in grammi" min="0"><button class="alt">Aggiungi</button></form>`;
-  if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + aiCardHTML(sel) + add;
-  if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + add;
+  if(!Object.keys(F).some(n => av(n) > 0)) return head + `<p class="note">La dispensa è vuota: <label for="t2">aggiungi cosa hai in casa</label> per vedere i piatti che puoi cucinare.</p>` + aiCardHTML(sel) + outHTML(sel) + add;
+  if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + outHTML(sel) + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
   const planned = today().plan?.[sel];
   let base = ok, pinned = false;
@@ -978,7 +1032,7 @@ function suggHTML(){
   return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
     + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
     + (miss.length ? `<details><summary>Ti manca un solo ingrediente per ${miss.length} ${miss.length===1?'piatto':'piatti'}</summary><p class="dish ing">${miss.map(x=>esc(x.n)+': '+esc(x.m[0])).join('<br>')}</p></details>` : '')
-    + aiCardHTML(sel) + add;
+    + aiCardHTML(sel) + quickFillHTML() + outHTML(sel) + add;
 }
 
 function renderDay(){
@@ -1262,9 +1316,20 @@ $('day').onclick = e => {
   if(b.dataset.aiconfirm!==undefined){ const key = aiKeyOf(dk(),sel), p = aiDish[key].pending;
     F[p.name] = f(p.est.cat, p.est.k, p.est.p, p.est.c, p.est.g, 50, 300); BASE[p.name] = {...F[p.name]};
     S.stock[p.name] = 1; save(); aiGenerateSkeleton(sel, null, p.name); return }
-  if(b.dataset.aicancel!==undefined){ delete aiDish[aiKeyOf(dk(),sel)]; renderDay() }
+  if(b.dataset.aicancel!==undefined){ delete aiDish[aiKeyOf(dk(),sel)]; renderDay(); return }
+  if(b.dataset.quickfill!==undefined){ const x = quickPicks[+b.dataset.quickfill];
+    today().log.push({m:sel, n:label(x.n,x.grams), k:Math.round(x.k), p:Math.round(x.p*10)/10, c:Math.round(x.c*10)/10, g:Math.round(x.g*10)/10});
+    save(); render(); navigator.vibrate?.(20); return }
+  if(b.dataset.outretry!==undefined){ const s = outState[aiKeyOf(dk(),sel)]; outEstimate(sel, s.desc, s.history||[]); return }
+  if(b.dataset.outreset!==undefined){ delete outState[aiKeyOf(dk(),sel)]; renderDay() }
 };
 $('day').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target);
+  if(e.target.dataset.outask!==undefined){ outEstimate(sel, f.get('d').trim(), []); return }
+  if(e.target.dataset.outanswer!==undefined){ const key = aiKeyOf(dk(),sel), s = outState[key];
+    outEstimate(sel, s.desc, [...s.history, {q:s.question, a:f.get('a').trim()}]); return }
+  if(e.target.dataset.outadd!==undefined){ const key = aiKeyOf(dk(),sel), s = outState[key];
+    today().log.push({m:sel, n:s.desc, k:Math.round(+f.get('k')), p:+f.get('p')||0, c:+f.get('c')||0, g:+f.get('g')||0, ai:true});
+    delete outState[key]; if(today().plan) delete today().plan[sel]; sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   today().log.push({m:sel, n:f.get('n').trim(), k:Math.round(+f.get('k')), p:Math.round(+f.get('p')||0)});
   if(today().plan) delete today().plan[sel];
   sel = undefined; save(); render() };
