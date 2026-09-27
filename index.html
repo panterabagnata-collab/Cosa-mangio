@@ -625,19 +625,6 @@ function ideasPrompt(n){
     `Per ciascun piatto: nome, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi. Rispondi solo con l'array JSON richiesto.`
   ].filter(Boolean).join('\n');
 }
-function aiPrompt(meal, t, avoidIngredient, avoidDish){
-  const inStock = Object.keys(F).filter(n => av(n) > 0);
-  return [
-    `Proponi UN piatto per il pasto "${meal}" di una persona in deficit calorico controllato.`,
-    `Budget per questo pasto: circa ${Math.round(t.k)} kcal e ${Math.round(t.p)} g di proteine, non sforare di molto.`,
-    `Ingredienti in dispensa (preferiscili se hanno senso nel piatto, ma puoi proporne altri): ${inStock.join(', ') || 'dispensa vuota, proponi qualcosa di semplice da comprare'}.`,
-    `Non usare MAI questi alimenti: ${AI_EXCLUDED}${S.dislikes.foods.length ? ', ' + S.dislikes.foods.join(', ') : ''}.`,
-    S.dislikes.dishes.length ? `Non riproporre piatti uguali o molto simili a: ${S.dislikes.dishes.join(', ')}.` : '',
-    avoidIngredient ? `Nell'ultima proposta l'ingrediente "${avoidIngredient}" non va bene: se c'è un sostituto sensato nello stesso piatto usalo, altrimenti cambia piatto del tutto.` : '',
-    avoidDish ? `Il piatto "${avoidDish}" non va bene: proponine uno diverso.` : '',
-    `Rispondi solo con il JSON richiesto: nome del piatto, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi.`
-  ].filter(Boolean).join('\n');
-}
 const aiKeyOf = (dateKey, meal) => dateKey+'|'+meal;
 // scheletro: l'AI sceglie solo la combinazione (proteina/carbo/condimenti) tra ingredienti veri di F,
 // le porzioni e i valori nutrizionali li calcola sempre cook() come per le ricette fisse — niente stime AI, tutto modificabile all'istante
@@ -756,17 +743,21 @@ async function aiGenerateSkeleton(meal, avoid, force){
   }catch(e){ aiDish[key] = {error: 'AI non disponibile: '+e.message} }
   renderDay();
 }
-function aiSkeletonDish(d){
-  const pf = d.over.pf ?? d.pf, cf = d.over.cf ?? d.cf;
+function aiSkeletonDish(d, t){
+  const over = d.over || {}, pf = over.pf ?? d.pf, cf = over.cf ?? d.cf;
   let pool = extraPool();
   if(d.forced && !pool.some(([n])=>n===d.forced)) pool = [...pool, [d.forced, F[d.forced].cat==='Verdura e frutta' ? 100 : 15]];
   const chosen = new Set([...(d.extras||[]), d.forced].filter(Boolean));
   const x = pool.map(([n,g]) => [n, g, !chosen.has(n)]);
   const rec = {id:'ai', n:d.name, p:pf, c:cf, x};
-  return {rec, pf, cf, dish: cook(rec, pf, cf, av, mealTarget(sel), d.over.extras || {})};
+  // proteina/carboidrato/condimenti scelti dall'AI (o dall'utente) valgono anche se non segnati in dispensa,
+  // altrimenti cook() li azzererebbe: av() reale resta il fallback per tutto il resto
+  const checkedExtra = new Set(Object.entries(over.extras||{}).filter(([,g])=>g>0).map(([n])=>n));
+  const avSk = n => (n===pf || n===cf || chosen.has(n) || checkedExtra.has(n)) ? Infinity : av(n);
+  return {rec, pf, cf, dish: cook(rec, pf, cf, avSk, t, over.extras || {})};
 }
 function aiSkeletonCardHTML(meal, d){
-  const {rec, pf, cf, dish} = aiSkeletonDish(d);
+  const {rec, pf, cf, dish} = aiSkeletonDish(d, mealTarget(meal));
   const swaps = `<select class="chip" data-aiswapf="pf" aria-label="Cambia proteina">${proteinPool().map(n=>`<option ${n===pf?'selected':''}>${esc(n)}</option>`).join('')}</select>`
     + `<select class="chip" data-aiswapf="cf" aria-label="Cambia carboidrato"><option value="" ${!cf?'selected':''}>nessuno</option>${carbPool().map(n=>`<option ${n===cf?'selected':''}>${esc(n)}</option>`).join('')}</select>`;
   const extras = rec.x.filter(([n,g]) => g && n!==pf && n!==cf).map(([n,g]) => {
@@ -795,6 +786,18 @@ function aiPendingHTML(p){
     </div>
   </article>`;
 }
+// piatto "vecchio stile" (stimato per intero dall'AI, ingredienti magari fuori da F): solo lettura,
+// può arrivare qui da "Idee per te" o da un'idea generata sui giorni futuri prima che diventassero oggi
+function aiLegacyCardHTML(d){
+  const r1 = v => Math.round(v*10)/10;
+  return `<article class="dish">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(d.name)}</h3><span class="badge ai">~ stima AI</span></div>
+    ${proteinBadge(d)}
+    <p class="ing">${(d.items||[]).map(it=>esc(Math.round(it.grams)+' g '+it.name)).join(', ')}</p>
+    ${d.prep ? `<p class="muted small" style="margin-top:6px">${esc(d.prep)}</p>` : ''}
+    ${macroFooter({k:Math.round(d.k), p:r1(d.p), c:r1(d.c), g:r1(d.g)}, 0, `<button data-legacyeat="1">L’ho mangiato</button>`)}
+  </article>`;
+}
 function aiCardHTML(meal){
   const key = aiKeyOf(dk(), meal), d = aiDish[key];
   if(!d) return `<div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap">
@@ -804,7 +807,8 @@ function aiCardHTML(meal){
   if(d === 'loading') return `<p class="note">Chiedo un’idea all’AI…</p>`;
   if(d.error) return `<p class="note warn">${esc(d.error)}</p><button class="alt" id="aiRetry" style="margin-top:8px">Riprova</button>`;
   if(d.pending) return aiPendingHTML(d.pending);
-  return aiSkeletonCardHTML(meal, d);
+  if(d.skeleton) return aiSkeletonCardHTML(meal, d);
+  return aiLegacyCardHTML(d);
 }
 function renderAiKeyBox(){
   $('aiKeyBox').innerHTML = ai
@@ -900,7 +904,7 @@ const macroFooter = (d,i,eatAttr) => `<footer style="display:flex;align-items:ce
   ${eatAttr}
 </footer>`;
 const proteinBadge = d => d.k>0 && d.p*4/d.k >= 0.35 ? '<span class="badge prot">💪 Ricco di proteine</span>' : '';
-let sel, current = [], cardOver = {}, cardOverMeal, pantryQ = '';
+let sel, current = [], cardOver = {}, cardOverMeal, cardIdx = 0, cardBaseLen = 0, pantryQ = '';
 
 function applyProducts(){
   for(const n in F) Object.assign(F[n], {k:BASE[n].k,p:BASE[n].p,c:BASE[n].c,g:BASE[n].g});
@@ -990,7 +994,7 @@ function outHTML(meal){
   return `<details style="margin-top:10px"><summary>Ho mangiato fuori o non ho pesato: descrivilo</summary><div style="margin-top:8px">${body}</div></details>`;
 }
 function suggHTML(){
-  if(cardOverMeal !== sel){ cardOver = {}; cardOverMeal = sel }
+  if(cardOverMeal !== sel){ cardOver = {}; cardOverMeal = sel; cardIdx = 0 }
   const t = mealTarget(sel), {K,eaten} = budget();
   const head = `<p class="target">Per questo pasto: circa <b style="color:var(--ink)">${nf(Math.round(t.k/10)*10)} kcal</b> e <b style="color:var(--ink)">${Math.round(t.p)} g</b> di proteine.</p>`;
   const add = `<form class="add" data-add><input type="text" name="n" placeholder="Altro (es. pizza con amici)" aria-label="Cosa hai mangiato" required><input type="number" name="k" placeholder="kcal" aria-label="Calorie" min="0" required><input type="number" name="p" placeholder="prot. g" aria-label="Proteine in grammi" min="0"><button class="alt">Aggiungi</button></form>`;
@@ -998,39 +1002,50 @@ function suggHTML(){
   if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + outHTML(sel) + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
   const planned = today().plan?.[sel];
-  let base = ok, pinned = false;
+  let base = ok;
   if(planned && typeof planned==='object' && planned!=='loading' && !planned.error){
     if(planned.ai){
       const key = aiKeyOf(dk(), sel);
-      if(!aiDish[key]){ aiDish[key] = planned; delete today().plan[sel]; save() }
+      if(!aiDish[key]){ aiDish[key] = planned.skeleton ? {...planned, over:planned.over||{}} : planned; delete today().plan[sel]; save() }
     } else if(planned.id){
       base = [planned, ...ok.filter(d => !(d.id===planned.id && d.pf===planned.pf && d.cf===planned.cf))];
-      pinned = true;
     }
   }
-  current = base.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
-    return cook(R.find(x=>x.id===d.id), ov.pf ?? d.pf, ov.cf ?? d.cf, av, t, ov.extras || {}) });
+  cardBaseLen = base.length;
+  if(cardIdx >= base.length) cardIdx = 0;
   const tip = today().mt && sel==='spuntino' ? `<p class="note">Giorno di Muay Thai: mangialo 60–90 minuti prima dell’allenamento.</p>` : '';
-  const card = (d,i) => {
-    const r = R.find(x=>x.id===d.id);
+  let body;
+  const picked = base[cardIdx];
+  if(picked){
+    const r = R.find(x=>x.id===picked.id);
+    const pf = cardOver.pf ?? picked.pf, cf = cardOver.cf ?? picked.cf;
+    const poolExtra = extraPool().filter(([n]) => !r.x.some(([xn])=>xn===n));
+    const rec = {...r, x:[...r.x, ...poolExtra.map(([n,g])=>[n,g,true])]};
+    // i condimenti del pool non sono per forza in dispensa: se li spunti valgono comunque, non li azzera av()
+    const checkedPool = new Set(Object.entries(cardOver.extras||{}).filter(([,g])=>g>0).map(([n])=>n));
+    const avPool = n => checkedPool.has(n) ? Infinity : av(n);
+    const d = cook(rec, pf, cf, avPool, t, cardOver.extras || {});
+    current = [d];
     const pOpts = r.p && r.p.includes('|') ? r.p.split('|').filter(usable) : null;
     const cOpts = r.c && r.c.includes('|') ? r.c.split('|').filter(usable) : null;
-    const swaps = (pOpts ? `<select class="chip" data-swap="pf" aria-label="Cambia proteina">${pOpts.map(n=>`<option ${n===d.pf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '')
-      + (cOpts ? `<select class="chip" data-swap="cf" aria-label="Cambia carboidrato">${cOpts.map(n=>`<option ${n===d.cf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '');
-    const extras = r.x.filter(([n,g]) => g && n!==d.pf && n!==d.cf).map(([n,g]) => {
+    const swaps = (pOpts ? `<select class="chip" data-swap="pf" aria-label="Cambia proteina">${pOpts.map(n=>`<option ${n===pf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '')
+      + (cOpts ? `<select class="chip" data-swap="cf" aria-label="Cambia carboidrato">${cOpts.map(n=>`<option ${n===cf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '');
+    const extras = rec.x.filter(([n,g]) => g && n!==pf && n!==cf).map(([n,g]) => {
       const cur = d.items.find(([xn])=>xn===n);
       return `<label class="qty ${cur?'has':''}"><span><input type="checkbox" data-ex="${esc(n)}" ${cur?'checked':''}> ${esc(n)}</span><input type="number" min="0" data-exg="${esc(n)}" value="${cur?cur[1]:g}" ${cur?'':'disabled'}><small>g</small></label>`;
     }).join('');
-    return `<article class="dish" data-i="${i}"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+    body = `<article class="dish" data-i="0"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
       <div class="row" style="gap:10px;align-items:center">${dishThumb(d)}<h3>${esc(d.n)}</h3></div>${proteinBadge(d)}</div>
       ${swaps ? `<div class="row" style="flex-wrap:wrap;margin:6px 0">${swaps}</div>` : ''}
       ${extras ? `<div class="qtys" style="margin:6px 0">${extras}</div>` : ''}
       <p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
-      ${macroFooter(d,i,`<button data-eat="${i}">L’ho mangiato</button>`)}
-      ${i===0 && pinned ? `<button class="ghost" data-unpin="1" style="margin-top:8px">Cambia piatto</button>` : ''}</article>`;
-  };
-  return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
-    + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
+      ${macroFooter(d,0,`<button data-eat="0">L’ho mangiato</button>`)}
+      ${base.length>1 ? `<button class="ghost" data-shuffle="1" style="margin-top:8px">🔀 Un altro piatto</button>` : ''}</article>`;
+  } else {
+    current = [];
+    body = `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`;
+  }
+  return head + tip + body
     + (miss.length ? `<details><summary>Ti manca un solo ingrediente per ${miss.length} ${miss.length===1?'piatto':'piatti'}</summary><p class="dish ing">${miss.map(x=>esc(x.n)+': '+esc(x.m[0])).join('<br>')}</p></details>` : '')
     + aiCardHTML(sel) + quickFillHTML() + outHTML(sel) + add;
 }
@@ -1055,9 +1070,18 @@ function planCardHTML(dateKey, meal){
   if(dish?.error) return row('', `<p class="muted small" style="color:var(--prot)">${esc(dish.error)}</p><button class="ghost" data-plan-fixed="${key}" style="margin-top:6px">Riprova</button>`);
   if(dish === null) return row('<span class="muted small">nessun piatto</span>', `<button class="ghost" data-plan-fixed="${key}" style="margin-top:6px">Riprova</button>`);
   if(!dish) return row(`<button class="ghost" data-plan-fixed="${key}">Genera</button>`);
-  const name = dish.n || dish.name;
+  if(dish.skeleton){
+    const total = aiSkeletonDish(dish, mealTargetFor(d, meal)).dish;
+    return row(`<span class="muted small">${Math.round(total.k)} kcal</span>`,
+      `<p style="margin-top:2px">${esc(dish.name)} <span class="badge ai">~AI</span></p>
+       ${proteinBadge(total)}
+       <div class="row" style="margin-top:6px;gap:6px">
+         <button class="ghost" data-plan-fixed="${key}">Cambia</button>
+         ${ai ? `<button class="ghost" data-plan-ai="${key}">Idea AI</button>` : ''}
+       </div>`);
+  }
   return row(`<span class="muted small">${Math.round(dish.k)} kcal</span>`,
-    `<p style="margin-top:2px">${dish.ai ? '' : dishIcon(dish)+' '}${esc(name)}${dish.ai ? ' <span class="badge ai">~AI</span>' : ''}</p>
+    `<p style="margin-top:2px">${dish.ai ? '' : dishIcon(dish)+' '}${esc(dish.n || dish.name)}${dish.ai ? ' <span class="badge ai">~AI</span>' : ''}</p>
      ${proteinBadge(dish)}
      <div class="row" style="margin-top:6px;gap:6px">
        <button class="ghost" data-plan-fixed="${key}">Cambia</button>
@@ -1082,12 +1106,14 @@ function renderPlanDays(){
     ${plan().map(m => planCardHTML(key, m)).join('')}
   </section>`).join('');
 }
-async function planAiGenerate(dateKey, meal, avoidIngredient, avoidDish){
+async function planAiGenerate(dateKey, meal){
   const d = dayAt(dateKey); d.plan ||= {};
   if(!ai){ d.plan[meal] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderPlanDays(); return }
   d.plan[meal] = 'loading'; renderPlanDays();
-  try{ d.plan[meal] = withTotals(await askGemini(aiPrompt(meal, mealTargetFor(d, meal), avoidIngredient, avoidDish))) }
-  catch(e){ d.plan[meal] = {error:'AI non disponibile: '+e.message} }
+  try{
+    const s = await askGemini(aiSkeletonPrompt(meal, mealTargetFor(d, meal), null, null, null), skeletonSchema(null));
+    d.plan[meal] = {skeleton:true, ai:true, name:s.name, pf:s.protein, cf:s.carb==='nessuno'?null:s.carb, extras:s.extras||[], over:{}};
+  }catch(e){ d.plan[meal] = {error:'AI non disponibile: '+e.message} }
   save(); renderPlanDays();
 }
 
@@ -1305,7 +1331,8 @@ $('day').onclick = e => {
     if(today().plan) delete today().plan[mealDone];
     sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; today().log.splice(i,1); save(); render() }
-  if(b.dataset.unpin){ delete today().plan[sel]; save(); renderDay(); return }
+  if(b.dataset.shuffle!==undefined){ if(today().plan) delete today().plan[sel];
+    cardOver = {}; cardIdx = cardBaseLen ? (cardIdx+1) % cardBaseLen : 0; renderDay(); return }
   if(b.id==='aiAsk'){ aiGenerate(sel, null, $('aiWant').value.trim() || null); return }
   if(b.id==='aiRetry'){ aiGenerate(sel, null, aiWant[aiKeyOf(dk(),sel)]); return }
   if(b.dataset.aidish!==undefined){ const key = aiKeyOf(dk(),sel), d = aiDish[key];
@@ -1317,6 +1344,9 @@ $('day').onclick = e => {
     F[p.name] = f(p.est.cat, p.est.k, p.est.p, p.est.c, p.est.g, 50, 300); BASE[p.name] = {...F[p.name]};
     S.stock[p.name] = 1; save(); aiGenerateSkeleton(sel, null, p.name); return }
   if(b.dataset.aicancel!==undefined){ delete aiDish[aiKeyOf(dk(),sel)]; renderDay(); return }
+  if(b.dataset.legacyeat!==undefined){ const key = aiKeyOf(dk(),sel), d = aiDish[key];
+    today().log.push({m:sel, n:d.name, k:Math.round(d.k), p:d.p, c:d.c, g:d.g, ai:true});
+    delete aiDish[key]; sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.quickfill!==undefined){ const x = quickPicks[+b.dataset.quickfill];
     today().log.push({m:sel, n:label(x.n,x.grams), k:Math.round(x.k), p:Math.round(x.p*10)/10, c:Math.round(x.c*10)/10, g:Math.round(x.g*10)/10});
     save(); render(); navigator.vibrate?.(20); return }
@@ -1345,7 +1375,7 @@ $('day').onchange = e => {
     else return;
     renderDay(); return;
   }
-  const i = +art.dataset.i, ov = cardOver[i] ||= {};
+  const ov = cardOver;
   if(e.target.dataset.swap==='pf') ov.pf = e.target.value;
   else if(e.target.dataset.swap==='cf') ov.cf = e.target.value;
   else if(e.target.dataset.ex!==undefined){ const n = e.target.dataset.ex, g = art.querySelector(`[data-exg="${n}"]`);
