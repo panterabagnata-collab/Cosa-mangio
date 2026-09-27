@@ -498,7 +498,7 @@ if(typeof module!=='undefined') module.exports = {F,R,cook,suggest,trend,advice,
 // ---------- fine logica ----------
 </script>
 <script>
-// ponytail: dati solo in questo browser (localStorage) + backup JSON manuale; sincronizzazione se mai servisse
+// dati in localStorage + backup JSON manuale; sincronizzazione multi-dispositivo via gist GitHub più sotto
 const KEY = 'cosa-mangio-oggi';
 let S; try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
 const init = s => Object.assign({stock:{}, skip:true, snackMorning:false, kcal:1800, prot:150, goal:70.3, days:{}, weights:{}, products:{}, t:0, dislikes:{foods:[],dishes:[]}, profile:{sex:'m',age:'',height:'',muscle:'',fat:''}, planMode:'stock', ideas:[]}, s || {});
@@ -923,7 +923,7 @@ function shopList(){
 function renderShop(){
   const l = shopList();
   $('shop').innerHTML = l.length ? `<div class="card"><p>${l.map(esc).join(', ')}</p><button class="alt" id="copyShop" style="margin-top:10px">Copia la lista</button></div>`
-    : `<p class="muted">Niente in esaurimento tra quello che hai mangiato nelle ultime due settimane.</p>`;
+    : `<p class="muted">Niente da ricomprare tra quello che hai mangiato nelle ultime due settimane.</p>`;
 }
 function renderProds(){
   const ps = Object.entries(S.products);

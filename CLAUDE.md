@@ -8,6 +8,7 @@ Sito: https://panterabagnata-collab.github.io/Cosa-mangio/
 - Stile "ponytail": la soluzione più semplice che funziona. Niente framework, niente build, niente dipendenze nuove se bastano poche righe. Un solo file.
 - Interfaccia in italiano, solo tema scuro (token CSS in `:root`).
 - Dopo ogni modifica: esegui il self-test, poi commit e push su `main` con messaggio in italiano.
+- Quando cambi architettura o prendi una decisione (non per un fix minore), aggiorna anche questo file nello stesso commit: è la fonte di verità per le sessioni future, non solo `index.html`.
 - Il repository è pubblico: non committare dati personali (peso, misure, backup JSON esportati dall'app, token di sincronizzazione).
 
 ## Struttura di index.html
@@ -30,9 +31,9 @@ Sito: https://panterabagnata-collab.github.io/Cosa-mangio/
 
 ## Test
 ```
-node -e "const s=require('fs').readFileSync('index.html','utf8');const a=s.indexOf('<script>')+8;require('fs').writeFileSync('/tmp/l.js',s.slice(a,s.indexOf('</script>',a)));console.log(require('/tmp/l.js').selfTest())"
+node -e "const os=require('os'),path=require('path'),fs=require('fs');const s=fs.readFileSync('index.html','utf8');const a=s.indexOf('<script>')+8;const p=path.join(os.tmpdir(),'l.js');fs.writeFileSync(p,s.slice(a,s.indexOf('</script>',a)));console.log(require(p).selfTest())"
 ```
-Deve stampare `selftest ok`. Nel browser: aggiungi `#test` all'URL e guarda la console.
+Deve stampare `selftest ok`. Usa `os.tmpdir()` invece di `/tmp` fisso: su Windows `/tmp` non esiste ed è stato causa di un errore reale in questa sessione. Nel browser: aggiungi `#test` all'URL e guarda la console.
 
 ## Vincoli alimentari (non cambiarli senza chiedere)
 - Ricette fisse (`R`) e dispensa: solo gli alimenti presenti in `F`. L'assistente AI fa eccezione ed è libero di proporre ingredienti fuori da `F` (confermato dall'utente): in quel caso le macro sono stimate dall'AI, non esatte.
