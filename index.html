@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
 /* solo tema scuro: superfici blu notte a gradini, angolo blu per le azioni, angolo rosso per proteine e avvisi */
-:root{--bg:#0C111C;--s1:#141B2B;--s2:#1B2438;--s3:#243050;--line:#2A3553;--ink:#E9EDF5;--muted:#8E9AB3;
+:root{--bg:#0C111C;--s1:#161F35;--s2:#202B4A;--s3:#2C3A63;--line:#374471;--ink:#E9EDF5;--muted:#8E9AB3;
   --blue:#4F6BFF;--blue-ink:#fff;--prot:#FF5C73;--carb:#F4B350;--fat:#2EC4B6;--ok:#3DD68C;
   color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 *,*::before,*::after{box-sizing:inherit}
@@ -56,6 +56,7 @@ button.alt{background:var(--s3);color:var(--ink)}
 button.ghost{background:transparent;color:var(--muted);padding:6px}
 button.link{background:transparent;color:var(--blue);padding:8px 0}
 input[type=text],input[type=number],input[type=password],select{font:16px Barlow,system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--s2);color:var(--ink);width:100%;min-width:0}
+select.chip{appearance:none;-webkit-appearance:none;width:auto;font:600 13px Barlow,sans-serif;padding:7px 28px 7px 14px;border-radius:999px;background-color:var(--s3);background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%238E9AB3' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
 input::placeholder{color:#66718A}
 .row{display:flex;gap:8px;align-items:center}
 .note{border-left:3px solid var(--carb);padding:10px 12px;background:var(--s2);border-radius:0 12px 12px 0;font-size:15px;margin:8px 0}
@@ -114,6 +115,9 @@ details summary{cursor:pointer;font-weight:600;padding:8px 0;color:var(--muted)}
 .qtys{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
 .qty{display:grid;grid-template-columns:minmax(0,1fr) 58px 14px;align-items:center;gap:4px;background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:4px 4px 4px 12px;font-size:14px;color:var(--muted)}
 .qty.has{border-color:var(--blue);color:var(--ink)}
+.badge{display:inline-block;flex:none;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.badge.ai{background:rgba(183,140,255,.15);color:#B78CFF}
+.badge.prot{background:rgba(255,92,115,.15);color:var(--prot)}
 .qty input{padding:7px;text-align:right;background:var(--bg)}
 .qty small{color:var(--muted)}
 .cat{font-size:14px;font-weight:600;color:var(--muted);margin:16px 0 8px}
@@ -609,8 +613,9 @@ function aiCardHTML(meal){
   return `<article class="dish" data-ai="1">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <h3>${esc(d.name)}</h3>
-      <span style="flex:none;background:rgba(183,140,255,.15);color:#B78CFF;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap">~ stima AI</span>
+      <span class="badge ai">~ stima AI</span>
     </div>
+    ${proteinBadge({k:t.k,p:t.p})}
     <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></li>`).join('')}</ul>
     <p class="muted small" style="margin-top:8px">${esc(d.prep)}</p>
     <footer style="margin-top:8px"><p class="m"><b>${Math.round(t.k)} kcal</b><span class="p">P ${r1(t.p)}</span><span class="c">C ${r1(t.c)}</span><span class="f">G ${r1(t.g)}</span></p><button data-aieat="1">L’ho mangiato</button></footer>
@@ -641,7 +646,7 @@ const TASTE_LIST = {
   'Altro': ['tofu','seitan','tempeh','funghi porcini','tartufo','olive','capperi','cioccolato','miele','marmellata','nutella','caffè','tè'],
 };
 function renderTaste(){
-  $('tasteList').innerHTML = Object.entries(TASTE_LIST).map(([g,ns]) => `<h3 class="cat">${esc(g)}</h3><div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>`).join('');
+  $('tasteList').innerHTML = Object.entries(TASTE_LIST).map(([g,ns]) => `<h3 class="cat">${CAT_ICON[g]||''} ${esc(g)}</h3><div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" value="${esc(n)}">${esc(n)}</label>`).join('')}</div>`).join('');
   const bl = S.dislikes, tag = (label,key) => `<button type="button" class="pill" data-unban="${esc(key)}" style="gap:4px">${esc(label)}${X_ICON}</button>`;
   $('tasteBlacklist').innerHTML = (bl.foods.length || bl.dishes.length)
     ? `<p class="muted small" style="margin-bottom:8px">In blacklist:</p><div class="row" style="flex-wrap:wrap">${bl.foods.map(n=>tag(n,'f:'+n)).join('')}${bl.dishes.map(n=>tag(n,'d:'+n)).join('')}</div>`
@@ -658,6 +663,10 @@ const plan = () => MEALS.filter(m => !(S.skip && m==='colazione'));
 const av = n => tracked(n) ? (S.stock[n]||0) : (S.stock[n] ? Infinity : 0);
 const usable = n => av(n) >= (F[n].lo || 1);
 const X_ICON = '<svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const CAT_ICON = {'Carne':'🍗','Pesce':'🐟','Uova e formaggi':'🥚','Carboidrati':'🍚','Verdura e frutta':'🥕','Sempre in casa':'🧂',
+  'Pesce e frutti di mare':'🐟','Uova e latticini':'🥚','Cereali, pasta e carboidrati':'🍚','Legumi':'🫘','Verdura':'🥕','Frutta':'🍎','Frutta secca e semi':'🥜','Condimenti, erbe e spezie':'🧂','Altro':'🍽️'};
+const dishIcon = d => CAT_ICON[F[d.pf]?.cat] || '🍽️';
+const proteinBadge = d => d.k>0 && d.p*4/d.k >= 0.35 ? '<span class="badge prot">💪 Ricco di proteine</span>' : '';
 let sel, current = [], cardOver = {}, cardOverMeal;
 
 function applyProducts(){
@@ -706,13 +715,13 @@ function suggHTML(){
     const r = R.find(x=>x.id===d.id);
     const pOpts = r.p && r.p.includes('|') ? r.p.split('|').filter(usable) : null;
     const cOpts = r.c && r.c.includes('|') ? r.c.split('|').filter(usable) : null;
-    const swaps = (pOpts ? `<select data-swap="pf" aria-label="Cambia proteina">${pOpts.map(n=>`<option ${n===d.pf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '')
-      + (cOpts ? `<select data-swap="cf" aria-label="Cambia carboidrato">${cOpts.map(n=>`<option ${n===d.cf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '');
+    const swaps = (pOpts ? `<select class="chip" data-swap="pf" aria-label="Cambia proteina">${pOpts.map(n=>`<option ${n===d.pf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '')
+      + (cOpts ? `<select class="chip" data-swap="cf" aria-label="Cambia carboidrato">${cOpts.map(n=>`<option ${n===d.cf?'selected':''}>${esc(n)}</option>`).join('')}</select>` : '');
     const extras = r.x.filter(([n,g]) => g && n!==d.pf && n!==d.cf).map(([n,g]) => {
       const cur = d.items.find(([xn])=>xn===n);
       return `<label class="qty ${cur?'has':''}"><span><input type="checkbox" data-ex="${esc(n)}" ${cur?'checked':''}> ${esc(n)}</span><input type="number" min="0" data-exg="${esc(n)}" value="${cur?cur[1]:g}" ${cur?'':'disabled'}><small>g</small></label>`;
     }).join('');
-    return `<article class="dish" data-i="${i}"><h3>${esc(d.n)}</h3>
+    return `<article class="dish" data-i="${i}"><div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${dishIcon(d)} ${esc(d.n)}</h3>${proteinBadge(d)}</div>
       ${swaps ? `<div class="row" style="flex-wrap:wrap;margin:6px 0">${swaps}</div>` : ''}
       ${extras ? `<div class="qtys" style="margin:6px 0">${extras}</div>` : ''}
       <p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
@@ -748,7 +757,8 @@ function planCardHTML(dateKey, meal){
   if(!dish) return row(`<button class="ghost" data-plan-fixed="${key}">Genera</button>`);
   const name = dish.n || dish.name;
   return row(`<span class="muted small">${Math.round(dish.k)} kcal</span>`,
-    `<p style="margin-top:2px">${esc(name)}${dish.ai ? ' <span class="muted small">(~AI)</span>' : ''}</p>
+    `<p style="margin-top:2px">${dish.ai ? '' : dishIcon(dish)+' '}${esc(name)}${dish.ai ? ' <span class="badge ai">~AI</span>' : ''}</p>
+     ${proteinBadge(dish)}
      <div class="row" style="margin-top:6px;gap:6px">
        <button class="ghost" data-plan-fixed="${key}">Cambia</button>
        ${ai ? `<button class="ghost" data-plan-ai="${key}">Idea AI</button>` : ''}
@@ -788,8 +798,9 @@ function ideaCardHTML(i){
   return `<article class="dish" style="margin-top:${i?10:0}px">
     <div class="row" style="justify-content:space-between;align-items:flex-start">
       <h3>${esc(d.n)}</h3>
-      <span style="flex:none;background:rgba(183,140,255,.15);color:#B78CFF;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap">~ stima AI</span>
+      <span class="badge ai">~ stima AI</span>
     </div>
+    ${proteinBadge(d)}
     <p class="ing">${d.items.map(it=>esc(Math.round(it.grams)+' g '+it.name)).join(', ')}</p>
     <p class="muted small" style="margin-top:6px">${esc(d.prep)}</p>
     <p class="m" style="margin-top:8px"><b>${d.k} kcal</b><span class="p">P ${d.p}</span><span class="c">C ${d.c}</span><span class="f">G ${d.g}</span></p>
@@ -819,7 +830,7 @@ async function genIdeas(){
 function renderPantry(){
   const groups = {};
   for(const n in F) (groups[F[n].cat] ||= []).push(n);
-  $('pantry').innerHTML = Object.entries(groups).map(([g,ns]) => `<h3 class="cat">${g}</h3>` + (g==='Sempre in casa'
+  $('pantry').innerHTML = Object.entries(groups).map(([g,ns]) => `<h3 class="cat">${CAT_ICON[g]||''} ${g}</h3>` + (g==='Sempre in casa'
     ? `<div class="chips">${ns.map(n=>`<label class="pill"><input type="checkbox" data-n="${esc(n)}" ${S.stock[n]?'checked':''}>${esc(n)}</label>`).join('')}</div>`
     : `<div class="qtys">${ns.map(n=>{ const v=S.stock[n]||0, q = F[n].cnt ? Math.round(v/F[n].u[0]) : Math.round(v);
         return `<label class="qty ${v>0?'has':''}"><span>${esc(n)}</span><input type="number" min="0" inputmode="numeric" data-n="${esc(n)}" value="${q||''}" placeholder="0"><small>${F[n].cnt?'pz':'g'}</small></label>` }).join('')}</div>`)).join('');
