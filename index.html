@@ -335,6 +335,7 @@ const F = {
   'sugo di pomodoro':f('Sempre in casa',45,1.5,7,1.2),
   'salsa di soia':f('Sempre in casa',55,8,5,0),
   'salsa di ostriche':f('Sempre in casa',50,1.4,11,.2),
+  'curry in polvere':f('Sempre in casa',325,14,55,14),
 };
 const BASE = JSON.parse(JSON.stringify(F));
 // ponytail: condimenti e verdure a volontà = sì/no, senza grammi; il resto si conta
@@ -352,6 +353,8 @@ const R = [
   {id:'pesto',m:'M',n:'Pasta al pesto con {p}',p:'petto di tacchino|petto di pollo|gamberetti',c:'pasta',x:[['pesto',18],['rucola',0]]},
   {id:'ragu',m:'M',n:'Pasta al ragù',p:'macinato di manzo 5%',c:'pasta',x:[['sugo di pomodoro',100],['parmigiano',10]]},
   {id:'tagliata',m:'M',n:'Tagliata con rucola, grana e patate',p:'manzo magro',c:'patate',x:[['rucola',0],['parmigiano',10],['olio EVO',10]]},
+  {id:'curry',m:'M',n:'Pollo al curry con patate',p:'petto di pollo',c:'patate',x:[['curry in polvere',8],['cuppettone',0],['olio EVO',10]]},
+  {id:'spezzatino',m:'M',n:'Spezzatino di manzo con patate e carote',p:'manzo magro',c:'patate',x:[['carote',100],['cuppettone',0],['olio EVO',10]]},
   {id:'insalata',m:'M',n:'Insalata di {p} con carote e pane',p:'petto di pollo|petto di tacchino',c:'pane',x:[['carote',100],['rucola',0],['cuppettone',0],['olio EVO',10]]},
   {id:'frittata',m:'M',n:'Frittata e pane',p:'albumi',c:'pane',x:[['uova',110],['cuppettone',0],['olio EVO',5]]},
   {id:'friedrice',m:'M',n:'Riso saltato con uova e carote',p:'albumi',c:'riso|riso integrale|riso venere',x:[['uova',110],['carote',100],['salsa di soia',15],['olio di sesamo',5]]},
