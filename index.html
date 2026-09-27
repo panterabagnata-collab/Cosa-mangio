@@ -209,6 +209,7 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
 
     <h2 class="sec">In casa</h2>
     <p class="muted small">Spunta cosa hai in casa. Tocca il nome per vedere i valori nutrizionali o aggiornarli con un barcode.</p>
+    <input type="search" id="pantrySearch" placeholder="Cerca nella dispensa" aria-label="Cerca nella dispensa" style="margin-bottom:10px">
     <div id="pantry"></div>
 
     <h2 class="sec">Da comprare</h2>
@@ -293,6 +294,7 @@ dialog.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cov
     <p id="camHint">Inquadra il codice a barre nel riquadro</p>
     <p id="camErr" class="note warn" hidden style="text-align:left;color:var(--ink)"></p>
     <div class="row" style="justify-content:center"><button id="scanRetry" hidden>Riprova</button><button id="scanStop" class="alt">Chiudi</button></div>
+    <form id="manualCode" class="row" style="margin-top:8px"><input type="text" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="Il lettore non legge? Scrivi il codice" aria-label="Codice a barre"><button class="alt">Cerca</button></form>
   </div>
 </dialog>
 
@@ -610,6 +612,26 @@ function aiPrompt(meal, t, avoidIngredient, avoidDish){
     `Rispondi solo con il JSON richiesto: nome del piatto, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi.`
   ].filter(Boolean).join('\n');
 }
+const ITEM_SCHEMA = {type:'OBJECT', properties:{name:{type:'STRING'}, grams:{type:'NUMBER'}, k:{type:'NUMBER'}, p:{type:'NUMBER'}, c:{type:'NUMBER'}, g:{type:'NUMBER'}}, required:['name','grams','k','p','c','g']};
+function swapPrompt(dish, it, newName){
+  return [
+    `Nel piatto "${dish.name}" (ingredienti: ${dish.items.map(x=>Math.round(x.grams)+'g '+x.name).join(', ')}),`,
+    `sostituisci "${it.name}" (${Math.round(it.grams)} g) con "${newName}", con una quantità che abbia senso nel piatto e valori nutrizionali il più possibile vicini a quelli dell'ingrediente originale (${Math.round(it.k)} kcal, P ${it.p}, C ${it.c}, G ${it.g}).`,
+    `Non usare MAI questi alimenti: ${AI_EXCLUDED}${S.dislikes.foods.length ? ', ' + S.dislikes.foods.join(', ') : ''}.`,
+    `Rispondi solo con il JSON richiesto per il nuovo ingrediente: nome, grammi e valori nutrizionali per quella quantità (non per 100 g).`
+  ].join('\n');
+}
+let aiSwapping = false;
+async function aiSwapIngredient(meal, i){
+  if(aiSwapping) return;
+  const key = aiKeyOf(dk(), meal), d = aiDish[key];
+  const newName = prompt(`Sostituisci "${d.items[i].name}" con:`);
+  if(!newName?.trim()) return;
+  aiSwapping = true;
+  try{ d.items[i] = await askGemini(swapPrompt(d, d.items[i], newName.trim()), ITEM_SCHEMA) }
+  catch(e){ alert('AI non disponibile: '+e.message) }
+  aiSwapping = false; renderDay();
+}
 const aiKeyOf = (dateKey, meal) => dateKey+'|'+meal;
 async function aiGenerate(meal, avoidIngredient, avoidDish){
   const key = aiKeyOf(dk(), meal);
@@ -632,7 +654,7 @@ function aiCardHTML(meal){
       <span class="badge ai">~ stima AI</span>
     </div>
     ${proteinBadge({k:t.k,p:t.p})}
-    <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></li>`).join('')}</ul>
+    <ul class="eaten">${d.items.map((it,i) => `<li><span>${esc(Math.round(it.grams))} g ${esc(it.name)}<br><small>${Math.round(it.k)} kcal · P ${r1(it.p)} · C ${r1(it.c)} · G ${r1(it.g)}</small></span><span class="row" style="gap:4px"><button class="ghost" data-aiswap="${i}" aria-label="Sostituisci ${esc(it.name)}">↔</button><button class="ghost" data-aiban="${i}" aria-label="Metti in blacklist ${esc(it.name)}">${X_ICON}</button></span></li>`).join('')}</ul>
     <p class="muted small" style="margin-top:8px">${esc(d.prep)}</p>
     ${macroFooter({k:Math.round(t.k),p:r1(t.p),c:r1(t.c),g:r1(t.g)}, 0, `<button data-aieat="1">L’ho mangiato</button>`)}
     <button class="ghost" data-aidish="1" style="margin-top:6px">Non mi piace questo piatto</button>
@@ -732,7 +754,7 @@ const macroFooter = (d,i,eatAttr) => `<footer style="display:flex;align-items:ce
   ${eatAttr}
 </footer>`;
 const proteinBadge = d => d.k>0 && d.p*4/d.k >= 0.35 ? '<span class="badge prot">💪 Ricco di proteine</span>' : '';
-let sel, current = [], cardOver = {}, cardOverMeal;
+let sel, current = [], cardOver = {}, cardOverMeal, pantryQ = '';
 
 function applyProducts(){
   for(const n in F) Object.assign(F[n], {k:BASE[n].k,p:BASE[n].p,c:BASE[n].c,g:BASE[n].g});
@@ -774,13 +796,14 @@ function suggHTML(){
   if(K-eaten.k < 80) return `<p class="note">Hai finito le calorie di oggi. Se hai fame: rucola, cuppettone, carote o bevande zero.</p>` + add;
   const {ok, miss} = suggest(sel, av, t, today().log, dk());
   const planned = today().plan?.[sel];
-  let base = ok;
+  let base = ok, pinned = false;
   if(planned && typeof planned==='object' && planned!=='loading' && !planned.error){
     if(planned.ai){
       const key = aiKeyOf(dk(), sel);
       if(!aiDish[key]){ aiDish[key] = planned; delete today().plan[sel]; save() }
     } else if(planned.id){
       base = [planned, ...ok.filter(d => !(d.id===planned.id && d.pf===planned.pf && d.cf===planned.cf))];
+      pinned = true;
     }
   }
   current = base.map((d,i) => { const ov = cardOver[i]; if(!ov) return d;
@@ -801,7 +824,8 @@ function suggHTML(){
       ${swaps ? `<div class="row" style="flex-wrap:wrap;margin:6px 0">${swaps}</div>` : ''}
       ${extras ? `<div class="qtys" style="margin:6px 0">${extras}</div>` : ''}
       <p class="ing">${d.items.map(([n,g])=>esc(label(n,g))).join(', ')}</p>
-      ${macroFooter(d,i,`<button data-eat="${i}">L’ho mangiato</button>`)}</article>`;
+      ${macroFooter(d,i,`<button data-eat="${i}">L’ho mangiato</button>`)}
+      ${i===0 && pinned ? `<button class="ghost" data-unpin="1" style="margin-top:8px">Cambia piatto</button>` : ''}</article>`;
   };
   return head + tip + (current.length ? current.slice(0,3).map(card).join('') : `<p class="note">Con quello che hai in casa non esce un piatto completo per questo pasto.</p>`)
     + (current.length > 3 ? `<details><summary>Altre ${current.length-3} idee</summary>${current.slice(3).map((d,i)=>card(d,i+3)).join('')}</details>` : '')
@@ -904,8 +928,12 @@ async function genIdeas(){
 function renderPantry(){
   const groups = {};
   for(const n in F) (groups[F[n].cat] ||= []).push(n);
-  $('pantry').innerHTML = Object.entries(groups).map(([g,ns]) => `<h3 class="cat">${CAT_ICON[g]||''} ${g}</h3>
-    <ul class="list">${ns.map(n => `<li style="align-items:flex-start">
+  const q = pantryQ.trim().toLowerCase();
+  $('pantry').innerHTML = Object.entries(groups).map(([g,ns]) => {
+    const filtered = q ? ns.filter(n => n.toLowerCase().includes(q)) : ns;
+    if(q && !filtered.length) return '';
+    return `<h3 class="cat">${CAT_ICON[g]||''} ${g}</h3>
+    <ul class="list">${filtered.map(n => `<li style="align-items:flex-start">
         <input type="checkbox" data-n="${esc(n)}" ${S.stock[n]?'checked':''} style="margin-top:4px;flex:none">
         <details style="flex:1;min-width:0"><summary>${esc(n)}</summary>
           <p class="muted small" style="margin-top:6px">${nf(F[n].k)} kcal · P ${nf(F[n].p,1)} · C ${nf(F[n].c,1)} · G ${nf(F[n].g,1)} <span class="muted">(per 100 g)</span></p>
@@ -913,7 +941,8 @@ function renderPantry(){
         </details>
       </li>`).join('')}
     </ul>
-    <button type="button" class="alt" data-addfood="${esc(g)}" style="margin-top:10px">+ Aggiungi alimento</button>`).join('');
+    ${q ? '' : `<button type="button" class="alt" data-addfood="${esc(g)}" style="margin-top:10px">+ Aggiungi alimento</button>`}`;
+  }).join('') || `<p class="muted small">Nessun alimento trovato.</p>`;
 }
 function shopList(){
   const used = new Set();
@@ -1074,7 +1103,9 @@ $('day').onclick = e => {
     if(today().plan) delete today().plan[mealDone];
     sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; today().log.splice(i,1); save(); render() }
+  if(b.dataset.unpin){ delete today().plan[sel]; save(); renderDay(); return }
   if(b.id==='aiAsk' || b.id==='aiRetry'){ aiGenerate(sel); return }
+  if(b.dataset.aiswap!==undefined){ aiSwapIngredient(sel, +b.dataset.aiswap); return }
   if(b.dataset.aiban!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].items[b.dataset.aiban].name;
     if(!S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); save(); aiGenerate(sel, n); return }
   if(b.dataset.aidish!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].name;
@@ -1112,6 +1143,8 @@ $('scanBtn').onclick = scan;
 $('scanStop').onclick = stopScan;
 $('scanRetry').onclick = scan;
 $('scanDlg').addEventListener('close', () => { controls?.stop(); controls = null });
+$('manualCode').onsubmit = e => { e.preventDefault(); const v = e.target[0].value.trim(); if(v){ stopScan(); lookup(v); e.target[0].value = '' } };
+$('pantrySearch').oninput = e => { pantryQ = e.target.value; renderPantry() };
 document.querySelectorAll('[name=tab]').forEach(r => r.onchange = () => scrollTo(0,0));
 $('codeForm').onsubmit = e => { e.preventDefault(); lookup($('codeIn').value); $('codeIn').value = '' };
 $('panel').onclick = e => {
