@@ -707,19 +707,50 @@ function renderWorkouts(){
     : `<p class="muted small">Nessun allenamento registrato oggi.</p>`;
   $('wkAiBox').innerHTML = aiWorkoutHTML();
 }
-async function aiGenerate(meal, avoidIngredient, avoidDish){
+const MULTI_SCHEMA = {type:'ARRAY', items:DISH_SCHEMA};
+function aiMultiPrompt(meal, t, want){
+  const inStock = Object.keys(F).filter(n => av(n) > 0);
+  return [
+    `Proponi 3 piatti diversi tra loro per il pasto "${meal}" di una persona in deficit calorico controllato, tutti con "${want}" come ingrediente.`,
+    `Budget per ciascun piatto: circa ${Math.round(t.k)} kcal e ${Math.round(t.p)} g di proteine, non sforare di molto.`,
+    `Ingredienti in dispensa (preferiscili per completare il piatto insieme a "${want}", ma puoi proporne altri): ${inStock.join(', ') || 'dispensa vuota, proponi qualcosa di semplice da comprare'}.`,
+    `Non usare MAI questi alimenti: ${AI_EXCLUDED}${S.dislikes.foods.length ? ', ' + S.dislikes.foods.join(', ') : ''}.`,
+    S.dislikes.dishes.length ? `Non riproporre piatti uguali o molto simili a: ${S.dislikes.dishes.join(', ')}.` : '',
+    `Varia molto la preparazione tra i 3 piatti pur usando sempre "${want}".`,
+    `Per ciascun piatto: nome, lista ingredienti con grammi e valori nutrizionali stimati per la quantità indicata (non per 100 g), breve procedura in 2-3 frasi. Rispondi solo con l'array JSON richiesto.`
+  ].filter(Boolean).join('\n');
+}
+let aiWant = {};
+async function aiGenerate(meal, avoidIngredient, avoidDish, want){
   const key = aiKeyOf(dk(), meal);
+  aiWant[key] = want;
   if(!ai){ aiDish[key] = {error:'Configura prima una API key Gemini nella scheda Andamento.'}; renderDay(); return }
   aiDish[key] = 'loading'; renderDay();
-  try{ aiDish[key] = await askGemini(aiPrompt(meal, mealTarget(meal), avoidIngredient, avoidDish)) }
-  catch(e){ aiDish[key] = {error: 'AI non disponibile: '+e.message} }
+  try{
+    aiDish[key] = want
+      ? {multi: (await askGemini(aiMultiPrompt(meal, mealTarget(meal), want), MULTI_SCHEMA)).map(withTotals)}
+      : await askGemini(aiPrompt(meal, mealTarget(meal), avoidIngredient, avoidDish));
+  }catch(e){ aiDish[key] = {error: 'AI non disponibile: '+e.message} }
   renderDay();
 }
+function aiMultiCardHTML(dish, i){
+  return `<article class="dish">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><h3>${esc(dish.n)}</h3><span class="badge ai">~ stima AI</span></div>
+    ${proteinBadge(dish)}
+    <p class="ing">${dish.items.map(it=>esc(Math.round(it.grams)+' g '+it.name)).join(', ')}</p>
+    <p class="muted small" style="margin-top:6px">${esc(dish.prep)}</p>
+    ${macroFooter(dish, 0, `<button data-aimulti="${i}">L’ho mangiato</button>`)}
+  </article>`;
+}
 function aiCardHTML(meal){
-  const d = aiDish[aiKeyOf(dk(), meal)];
-  if(!d) return `<button class="alt" id="aiAsk" style="margin-top:10px;width:100%">Chiedi un’idea all’AI</button>`;
+  const key = aiKeyOf(dk(), meal), d = aiDish[key];
+  if(!d) return `<div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap">
+    <input type="text" id="aiWant" placeholder="Un ingrediente che vuoi usare (opzionale)" style="flex:1;min-width:160px">
+    <button class="alt" id="aiAsk">Chiedi un’idea all’AI</button>
+  </div>`;
   if(d === 'loading') return `<p class="note">Chiedo un’idea all’AI…</p>`;
   if(d.error) return `<p class="note warn">${esc(d.error)}</p><button class="alt" id="aiRetry" style="margin-top:8px">Riprova</button>`;
+  if(d.multi) return d.multi.map((dish,i) => aiMultiCardHTML(dish,i)).join('') + `<button class="ghost" id="aiRetry" style="margin-top:6px">Altre idee con ${esc(aiWant[key])}</button>`;
   const r1 = v => Math.round(v*10)/10;
   const t = d.items.reduce((a,it)=>({k:a.k+(+it.k||0), p:a.p+(+it.p||0), c:a.c+(+it.c||0), g:a.g+(+it.g||0)}), {k:0,p:0,c:0,g:0});
   return `<article class="dish" data-ai="1">
@@ -1180,7 +1211,11 @@ $('day').onclick = e => {
     sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.del!==undefined){ const i = +b.dataset.del; today().log.splice(i,1); save(); render() }
   if(b.dataset.unpin){ delete today().plan[sel]; save(); renderDay(); return }
-  if(b.id==='aiAsk' || b.id==='aiRetry'){ aiGenerate(sel); return }
+  if(b.id==='aiAsk'){ aiGenerate(sel, null, null, $('aiWant').value.trim() || null); return }
+  if(b.id==='aiRetry'){ aiGenerate(sel, null, null, aiWant[aiKeyOf(dk(),sel)]); return }
+  if(b.dataset.aimulti!==undefined){ const key = aiKeyOf(dk(),sel), dish = aiDish[key].multi[+b.dataset.aimulti];
+    today().log.push({m:sel, n:dish.n, k:dish.k, p:dish.p, c:dish.c, g:dish.g, ai:true});
+    delete aiDish[key]; sel = undefined; save(); render(); navigator.vibrate?.(20); return }
   if(b.dataset.aiswap!==undefined){ aiSwapIngredient(sel, +b.dataset.aiswap); return }
   if(b.dataset.aiban!==undefined){ const n = aiDish[aiKeyOf(dk(),sel)].items[b.dataset.aiban].name;
     if(!S.dislikes.foods.includes(n)) S.dislikes.foods.push(n); save(); aiGenerate(sel, n); return }
